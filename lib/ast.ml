@@ -28,7 +28,7 @@ type bin_op =
 [@@deriving show { with_path = false }]
 
 type un_op = Minus | Not [@@deriving show { with_path = false }]
-type recursive = Rec | Not [@@deriving show { with_path = false }]
+type recursive = Rec | NotRec [@@deriving show { with_path = false }]
 
 type expr =
   | ELiteral of const_type

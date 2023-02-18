@@ -78,6 +78,29 @@ let bin_op =
       concat;
     ]
 
+let un_op =
+  option "" (string "-") >>= function "" -> return Not | _ -> return Minus
+
+let literal x = ELiteral x
+
+let expr =
+  let lit = const_t >>= fun t -> return @@ ELiteral t in
+  let b_op =
+    bin_op >>= fun op ->
+    return @@ fun x y -> EBinOp (op, x, y)
+  in
+  let u_op p =
+    un_op >>= fun op ->
+    p >>= fun e -> return @@ EUnOp (op, e)
+  in
+  let chainl1 e op =
+    let rec go acc = lift2 (fun f x -> f acc x) op e >>= go <|> return acc in
+    e >>= fun init -> go init
+  in
+  fix (fun self ->
+      let factor = trim @@ conde [ u_op @@ parents self; trim @@ u_op lit ] in
+      trim @@ chainl1 factor b_op)
+
 (*******************************************tests*******************************************)
 let pr_opt p str = Result.get_ok @@ parse_string ~consume:All p str
 let pr_not_opt p str = Result.get_error @@ parse_string ~consume:All p str
