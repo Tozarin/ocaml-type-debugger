@@ -37,6 +37,27 @@ let str =
 let unit = string "()" *> return TUnit
 let const_t = conde [ int_num; float_num; bool; ch; str; unit ]
 
+let bin_op = function
+  | "+" -> return IAdd
+  | "-" -> return ISub
+  | "*" -> return IMul
+  | "\\" -> return IDiv
+  | "+." -> return FAdd
+  | "-." -> return FSub
+  | "*." -> return FMul
+  | "\\." -> return FDiv
+  | "mod" -> return Mod
+  | "<" -> return Less
+  | ">" -> return Gre
+  | "<=" -> return Leq
+  | ">=" -> return Geq
+  | "==" | "=" -> return Eq
+  | "<>" | "!=" -> return Neg
+  | "&&" -> return And
+  | "||" -> return Or
+  | "::" -> return Concat
+  | x -> fail @@ Printf.sprintf {|'%s' is not a bin_op|} x
+
 (*******************************************tests*******************************************)
 let pr_opt p str = Result.get_ok @@ parse_string ~consume:All p str
 let pr_not_opt p str = Result.get_error @@ parse_string ~consume:All p str
@@ -148,7 +169,7 @@ let%expect_test _ =
 
 let%expect_test _ =
   print_string @@ show_const_type (pr_opt const_t {|()|});
-  [%expect{| TUnit |}]
+  [%expect {| TUnit |}]
 
 let%expect_test _ =
   print_string @@ show_const_type (pr_opt const_t {|0x.0|});
@@ -160,4 +181,4 @@ let%expect_test _ =
 
 let%expect_test _ =
   print_string @@ show_const_type (pr_opt const_t "'\n'");
-  [%expect{| TChar |}]
+  [%expect {| TChar |}]
