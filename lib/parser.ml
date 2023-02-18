@@ -37,26 +37,46 @@ let str =
 let unit = string "()" *> return TUnit
 let const_t = conde [ int_num; float_num; bool; ch; str; unit ]
 
-let bin_op = function
-  | "+" -> return IAdd
-  | "-" -> return ISub
-  | "*" -> return IMul
-  | "\\" -> return IDiv
-  | "+." -> return FAdd
-  | "-." -> return FSub
-  | "*." -> return FMul
-  | "\\." -> return FDiv
-  | "mod" -> return Mod
-  | "<" -> return Less
-  | ">" -> return Gre
-  | "<=" -> return Leq
-  | ">=" -> return Geq
-  | "==" | "=" -> return Eq
-  | "<>" | "!=" -> return Neg
-  | "&&" -> return And
-  | "||" -> return Or
-  | "::" -> return Concat
-  | x -> fail @@ Printf.sprintf {|'%s' is not a bin_op|} x
+let bin_op =
+  let iadd = string "+" *> return IAdd in
+  let isub = string "-" *> return ISub in
+  let imul = string "*" *> return IMul in
+  let idiv = string "\\" *> return IDiv in
+  let fadd = string "+." *> return FAdd in
+  let fsub = string "-." *> return FSub in
+  let fmul = string "*." *> return FMul in
+  let fdiv = string "\\." *> return FDiv in
+  let md = string "mod" *> return Mod in
+  let less = string "<" *> return Less in
+  let gre = string ">" *> return Gre in
+  let leq = string "<=" *> return Leq in
+  let geq = string ">=" *> return Geq in
+  let eq = (string "==" <|> string "=") *> return Eq in
+  let neq = (string "<>" <|> string "!=") *> return Neg in
+  let logand = string "&&" *> return And in
+  let logor = string "||" *> return Or in
+  let concat = string "::" *> return Concat in
+  conde
+    [
+      iadd;
+      isub;
+      imul;
+      idiv;
+      fadd;
+      fsub;
+      fmul;
+      fdiv;
+      md;
+      less;
+      gre;
+      leq;
+      geq;
+      eq;
+      neq;
+      logand;
+      logor;
+      concat;
+    ]
 
 (*******************************************tests*******************************************)
 let pr_opt p str = Result.get_ok @@ parse_string ~consume:All p str
