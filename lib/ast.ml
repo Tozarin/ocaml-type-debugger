@@ -10,6 +10,7 @@ type bin_op =
   | ISub
   | IMul
   | IDiv
+  (* mb separate float and int ops *)
   | FAdd
   | FSub
   | FMul
