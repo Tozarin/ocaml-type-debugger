@@ -1,44 +1,32 @@
 type id = string
 type constructor_name = string
+type const_type = TInt | TFloat | TBool | TChar | TString | TUnit
+(* mb more things or another type for this*)
 
-type const_type = 
-  | TInt
-  | TFLoat
-  | TBool
-  | TChar
-  | TString
-  | TUnit
-  (* mb more things or another type for this*)
-
-type bin_op = 
-  | IAdd 
-  | ISub 
-  | IMul 
-  | IDiv 
-  | FAdd 
-  | FSub 
-  | FMul 
-  | FDiv 
-  | Mod 
-  | Less 
-  | Gre 
-  | Leq 
-  | Geq 
-  | Eq 
-  | Neg 
-  | And 
-  | Or 
+type bin_op =
+  | IAdd
+  | ISub
+  | IMul
+  | IDiv
+  | FAdd
+  | FSub
+  | FMul
+  | FDiv
+  | Mod
+  | Less
+  | Gre
+  | Leq
+  | Geq
+  | Eq
+  | Neg
+  | And
+  | Or
   | Concat
 
-type un_op = 
-  | Minus
-  | Not
+type un_op = Minus | Not
+type recursive = Rec | Not
 
-type recursive = 
-  | Rec
-  | Not
-
-type expr = 
+type expr =
   | ELiteral of const_type
   | EBinOp of bin_op * expr * expr
   | EUnOp of un_op * expr
