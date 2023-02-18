@@ -1,6 +1,8 @@
-type id = string
-type constructor_name = string
+type id = string [@@deriving show { with_path = false }]
+type constructor_name = string [@@deriving show { with_path = false }]
+
 type const_type = TInt | TFloat | TBool | TChar | TString | TUnit
+[@@deriving show { with_path = false }]
 (* mb more things or another type for this*)
 
 type bin_op =
@@ -22,9 +24,10 @@ type bin_op =
   | And
   | Or
   | Concat
+[@@deriving show { with_path = false }]
 
-type un_op = Minus | Not
-type recursive = Rec | Not
+type un_op = Minus | Not [@@deriving show { with_path = false }]
+type recursive = Rec | Not [@@deriving show { with_path = false }]
 
 type expr =
   | ELiteral of const_type
@@ -41,5 +44,6 @@ type expr =
   | EMatch of expr * (expr * expr) list
   (* mb type for patterns *)
   | EConstructor of constructor_name * expr option
+[@@deriving show { with_path = false }]
 
 (* TODO: custom types (single, adt, gadt mb)*)
