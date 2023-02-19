@@ -10,6 +10,13 @@ let conde = function
   | [] -> fail "Empty condition"
   | h :: tl -> List.fold_left ( <|> ) h tl
 
+let id =
+  let f_ch = function '_' | '0' .. '9' | 'a' .. 'z' -> true | _ -> false in
+  let other_ch = function '\'' | 'A' .. 'Z' -> true | _ -> false in
+  let other c = f_ch c || other_ch c in
+  satisfy f_ch >>= fun f ->
+  take_while other >>= fun e -> return @@ Printf.sprintf "%c%s" f e
+
 let is_d = function '0' .. '9' -> true | _ -> false
 let nums = take_while1 is_d
 
@@ -81,8 +88,6 @@ let bin_op =
 let un_op =
   option "" (string "-") >>= function "" -> return Not | _ -> return Minus
 
-let literal x = ELiteral x
-
 let expr =
   let lit = const_t >>= fun t -> return @@ ELiteral t in
   let b_op =
@@ -93,13 +98,20 @@ let expr =
     un_op >>= fun op ->
     p >>= fun e -> return @@ EUnOp (op, e)
   in
+  let app =
+    option "" (string "@@") >>= fun _ ->
+    return @@ fun x y -> EApp (x, y)
+  in
+  let eid = id >>= fun id -> return @@ EId id in
   let chainl1 e op =
     let rec go acc = lift2 (fun f x -> f acc x) op e >>= go <|> return acc in
     e >>= fun init -> go init
   in
   fix (fun self ->
-      let factor = trim @@ conde [ u_op @@ parents self; trim @@ u_op lit ] in
-      trim @@ chainl1 factor b_op)
+      let factor =
+        trim @@ conde [ u_op @@ parents self; trim @@ u_op (lit <|> eid) ]
+      in
+      trim @@ chainl1 factor (b_op <|> app))
 
 (*******************************************tests*******************************************)
 let pr_opt p str = Result.get_ok @@ parse_string ~consume:All p str
