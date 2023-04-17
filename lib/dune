@@ -1,8 +1,0 @@
-(library
- (name otp)
- (public_name otp)
- (modules ast parser)
- (libraries angstrom)
- (preprocess
-  (pps ppx_expect ppx_deriving.show ppx_compare))
- (inline_tests))

@@ -6,9 +6,60 @@
   (flags
    (:standard -warn-error -A -w -58))))
 
+(copy_files# parsing/*.ml{,i})
+
+(copy_files# typing/*.ml{,i})
+
+(copy_files# utils/*.ml{,i})
+
+(copy_files# file_formats/*.ml{,i})
+
 (executable
- (name REPL)
+ (name main2)
  (package otp)
- (public_name REPL)
- (modules REPL)
- (libraries otp stdio))
+ (public_name main2)
+ (preprocess
+  (pps ppx_expect ppx_deriving.show))
+ (modules_without_implementation
+  annot
+  asttypes
+  cmo_format
+  outcometree
+  parsetree)
+ (modules
+  test
+  main2
+  infertypes
+  ;; UTILS
+  warnings
+  misc
+  build_path_prefix_map
+  terminfo
+  config
+  clflags
+  profile
+  numbers
+  identifiable
+  arg_helper
+  ;; PARSING
+  location
+  longident
+  docstrings
+  syntaxerr
+  ast_helper
+  camlinternalMenhirLib
+  parser
+  lexer
+  parse
+  printast
+  pprintast
+  ast_mapper
+  ast_iterator
+  attr_helper
+  builtin_attributes
+  ast_invariants
+  depend
+  ; manual update: mli only files
+  asttypes
+  parsetree)
+ (libraries stdio))

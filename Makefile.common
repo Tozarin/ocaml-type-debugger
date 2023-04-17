@@ -1,0 +1,4 @@
+open Longident
+open Pprintast
+
+let () = longident @@ parse "let foo = 1"
