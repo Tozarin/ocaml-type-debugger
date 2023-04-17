@@ -270,8 +270,7 @@ let infer =
           let t = apply sb t in
           let rez_t = tr_arr t body_t (reasons nl_fun loc) in
           return (rez_t, sb)
-      (* | Pexp_let (_, v_bs, expr) ->
-          (* todo rec *)
+      | Pexp_let (Nonrecursive, v_bs, expr) ->
           let* env', sb =
             List.fold_left
               (fun acc v_b ->
@@ -283,18 +282,6 @@ let infer =
                 let rec helper' env sb p e =
                   match p.ppat_desc with
                   | Ppat_var var -> return (extend env var.txt (e, sb), sb)
-                  (* | Ppat_var var ->
-                      let* t =
-                        match count_of_args ex.pexp_desc with
-                        | 0 ->
-                            fresh_var var.loc >>| fun t ->
-                            new_reason t (reasons rec_fun var.loc)
-                        | n -> fun_with_args n var.loc
-                      in
-                      let env = TypeEnv.extend env var.txt (t, sb) in
-                      let* e, sb' = helper env ex in
-                      let* sb = compose sb sb' in
-                      return (extend env var.txt (e, sb), sb) *)
                   | Ppat_tuple ps -> (
                       match e with
                       | TRTuple (ns, _) -> (
@@ -317,8 +304,8 @@ let infer =
           in
           let* t, sb' = helper env' expr in
           let* sb = compose sb sb' in
-          return (t, sb) *)
-      | Pexp_let (rec_f, v_bs, expr) ->
+          return (t, sb)
+      | Pexp_let (Recursive, v_bs, expr) ->
           let* env', sb =
             List.fold_left
               (fun acc v ->
@@ -327,21 +314,20 @@ let infer =
                 let e = v.pvb_expr in
                 match p.ppat_desc with
                 | Ppat_var var ->
-                    let* env =
-                      match rec_f with
-                      | Nonrecursive -> return env
-                      | Recursive ->
-                          let* t =
-                            match count_of_args e.pexp_desc with
-                            | 0 ->
-                                fresh_var var.loc >>| fun t ->
-                                new_reason t (reasons rec_fun var.loc)
-                            | n -> fun_with_args n var.loc
-                          in
-                          return @@ extend env var.txt (t, empty)
+                    let* env, t =
+                      let* t =
+                        match count_of_args e.pexp_desc with
+                        | 0 ->
+                            fresh_var var.loc >>| fun t ->
+                            new_reason t (reasons rec_fun var.loc)
+                        | n -> fun_with_args n var.loc
+                      in
+                      return (extend env var.txt (t, empty), t)
                     in
                     let* e, sb' = helper env e in
                     let* sb = compose sb sb' in
+                    let* sb = unify sb t e in
+                    let e = apply sb t in
                     return (extend env var.txt (e, sb), sb)
                 | _ -> fail `NotImplemented)
               (return (env, empty))
