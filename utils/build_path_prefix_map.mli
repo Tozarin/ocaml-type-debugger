@@ -20,6 +20,7 @@
 
 *)
 
+
 type path = string
 type path_prefix = string
 type error_message = string
@@ -27,7 +28,7 @@ type error_message = string
 val encode_prefix : path_prefix -> string
 val decode_prefix : string -> (path_prefix, error_message) result
 
-type pair = { target : path_prefix; source : path_prefix }
+type pair = { target: path_prefix; source : path_prefix }
 
 val encode_pair : pair -> string
 val decode_pair : string -> (pair, error_message) result

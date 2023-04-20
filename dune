@@ -15,9 +15,9 @@
 (copy_files# file_formats/*.ml{,i})
 
 (executable
- (name main2)
+ (name main)
  (package otp)
- (public_name main2)
+ (public_name main)
  (preprocess
   (pps ppx_expect ppx_deriving.show))
  (modules_without_implementation
@@ -28,19 +28,75 @@
   parsetree)
  (modules
   test
+  main
   main2
   infertypes
+  ;; TYPING
+  ident
+  path
+  primitive
+  types
+  btype
+  oprint
+  subst
+  predef
+  datarepr
+  cmi_format
+  persistent_env
+  env
+  type_immediacy
+  typedtree
+  printtyped
+  ctype
+  printtyp
+  includeclass
+  mtype
+  envaux
+  includecore
+  tast_iterator
+  tast_mapper
+  cmt_format
+  untypeast
+  includemod
+  typetexp
+  patterns
+  printpat
+  parmatch
+  stypes
+  typedecl
+  typeopt
+  rec_check
+  typecore
+  typeclass
+  typemod
+  typedecl_variance
+  typedecl_properties
+  typedecl_immediacy
+  typedecl_unboxed
+  typedecl_separability
+  cmt2annot
+  ; manual update: mli only files
+  annot
+  outcometree
   ;; UTILS
-  warnings
-  misc
-  build_path_prefix_map
-  terminfo
   config
+  build_path_prefix_map
+  misc
+  identifiable
+  numbers
+  arg_helper
   clflags
   profile
-  numbers
-  identifiable
-  arg_helper
+  terminfo
+  ccomp
+  warnings
+  consistbl
+  strongly_connected_components
+  targetint
+  load_path
+  int_replace_polymorphic_compare
+  binutils
+  local_store
   ;; PARSING
   location
   longident

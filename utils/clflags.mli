@@ -21,9 +21,11 @@ module Int_arg_helper : sig
 
   val parse : string -> string -> parsed ref -> unit
 
-  type parse_result = Ok | Parse_failed of exn
-
+  type parse_result =
+    | Ok
+    | Parse_failed of exn
   val parse_no_error : string -> parsed ref -> parse_result
+
   val get : key:int -> parsed -> int
 end
 
@@ -33,9 +35,11 @@ module Float_arg_helper : sig
 
   val parse : string -> string -> parsed ref -> unit
 
-  type parse_result = Ok | Parse_failed of exn
-
+  type parse_result =
+    | Ok
+    | Parse_failed of exn
   val parse_no_error : string -> parsed ref -> parse_result
+
   val get : key:int -> parsed -> float
 end
 
@@ -58,9 +62,9 @@ val o1_arguments : inlining_arguments
 val o2_arguments : inlining_arguments
 val o3_arguments : inlining_arguments
 
-val use_inlining_arguments_set : ?round:int -> inlining_arguments -> unit
 (** Set all the inlining arguments for a round.
     The default is set if no round is provided. *)
+val use_inlining_arguments_set : ?round:int -> inlining_arguments -> unit
 
 val objfiles : string list ref
 val ccobjs : string list ref
@@ -205,9 +209,11 @@ val classic_inlining : bool ref
 val afl_instrument : bool ref
 val afl_inst_ratio : int ref
 val function_sections : bool ref
+
 val all_passes : string list ref
 val dumped_pass : string -> bool
 val set_dumped_pass : string -> bool -> unit
+
 val dump_into_file : bool ref
 
 (* Support for flags that can also be set from an environment variable *)
@@ -220,29 +226,31 @@ type 'a env_reader = {
 
 val color : Misc.Color.setting option ref
 val color_reader : Misc.Color.setting env_reader
+
 val error_style : Misc.Error_style.setting option ref
 val error_style_reader : Misc.Error_style.setting env_reader
+
 val unboxed_types : bool ref
+
 val insn_sched : bool ref
 val insn_sched_default : bool
 
 module Compiler_pass : sig
   type t = Parsing | Typing | Scheduling | Emit
-
   val of_string : string -> t option
   val to_string : t -> string
   val is_compilation_pass : t -> bool
   val available_pass_names : filter:(t -> bool) -> native:bool -> string list
   val can_save_ir_after : t -> bool
   val compare : t -> t -> int
-  val to_output_filename : t -> prefix:string -> string
-  val of_input_filename : string -> t option
+  val to_output_filename: t -> prefix:string -> string
+  val of_input_filename: string -> t option
 end
-
 val stop_after : Compiler_pass.t option ref
 val should_stop_after : Compiler_pass.t -> bool
 val set_save_ir_after : Compiler_pass.t -> bool -> unit
 val should_save_ir_after : Compiler_pass.t -> bool
+
 val arg_spec : (string * Arg.spec * string) list ref
 
 (* [add_arguments __LOC__ args] will add the arguments from [args] at
@@ -253,7 +261,7 @@ val arg_spec : (string * Arg.spec * string) list ref
 val add_arguments : string -> (string * Arg.spec * string) list -> unit
 
 (* [parse_arguments argv anon_arg usage] will parse the arguments, using
-   the arguments provided in [Clflags.arg_spec].
+  the arguments provided in [Clflags.arg_spec].
 *)
 val parse_arguments : string array -> Arg.anon_fun -> string -> unit
 

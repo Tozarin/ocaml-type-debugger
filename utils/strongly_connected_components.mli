@@ -14,38 +14,30 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Modules about numbers, some of which satisfy {!Identifiable.S}.
+(** Kosaraju's algorithm for strongly connected components.
 
   {b Warning:} this module is unstable and part of
   {{!Compiler_libs}compiler-libs}.
 
 *)
 
-module Int : sig
-  include Identifiable.S with type t = int
+module type S = sig
+  module Id : Identifiable.S
 
-  (** [zero_to_n n] is the set of numbers \{0, ..., n\} (inclusive). *)
-  val zero_to_n : int -> Set.t
-  val to_string : int -> string
+  type directed_graph = Id.Set.t Id.Map.t
+  (** If (a -> set) belongs to the map, it means that there are edges
+      from [a] to every element of [set].  It is assumed that no edge
+      points to a vertex not represented in the map. *)
+
+  type component =
+    | Has_loop of Id.t list
+    | No_loop of Id.t
+
+  val connected_components_sorted_from_roots_to_leaf
+     : directed_graph
+    -> component array
+
+  val component_graph : directed_graph -> (component * int list) array
 end
 
-module Int8 : sig
-  type t
-
-  val zero : t
-  val one : t
-
-  val of_int_exn : int -> t
-  val to_int : t -> int
-end
-
-module Int16 : sig
-  type t
-
-  val of_int_exn : int -> t
-  val of_int64_exn : Int64.t -> t
-
-  val to_int : t -> int
-end
-
-module Float : Identifiable.S with type t = float
+module Make (Id : Identifiable.S) : S with module Id := Id

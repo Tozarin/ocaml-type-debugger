@@ -29,8 +29,8 @@ module Make (S : sig
   module Key : sig
     type t
 
-    val of_string : string -> t
     (** The textual representation of a key must not contain '=' or ','. *)
+    val of_string : string -> t
 
     module Map : Map.S with type key = t
   end
@@ -38,22 +38,31 @@ module Make (S : sig
   module Value : sig
     type t
 
-    val of_string : string -> t
     (** The textual representation of a value must not contain ','. *)
+    val of_string : string -> t
   end
 end) : sig
   type parsed
 
   val default : S.Value.t -> parsed
+
   val set_base_default : S.Value.t -> parsed -> parsed
+
   val add_base_override : S.Key.t -> S.Value.t -> parsed -> parsed
+
   val reset_base_overrides : parsed -> parsed
+
   val set_user_default : S.Value.t -> parsed -> parsed
+
   val add_user_override : S.Key.t -> S.Value.t -> parsed -> parsed
+
   val parse : string -> string -> parsed ref -> unit
 
-  type parse_result = Ok | Parse_failed of exn
+  type parse_result =
+    | Ok
+    | Parse_failed of exn
 
   val parse_no_error : string -> parsed ref -> parse_result
+
   val get : key:S.Key.t -> parsed -> S.Value.t
 end

@@ -13,20 +13,29 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Basic interface to the terminfo database
+(** Compiling C files and building C libraries
 
   {b Warning:} this module is unstable and part of
   {{!Compiler_libs}compiler-libs}.
 
 *)
 
-type status =
-  | Uninitialised
-  | Bad_term
-  | Good_term
+val command: string -> int
+val run_command: string -> unit
+val compile_file:
+  ?output:string -> ?opt:string -> ?stable_name:string -> string -> int
+val create_archive: string -> string list -> int
+val expand_libname: string -> string
+val quote_files: string list -> string
+val quote_optfile: string option -> string
+(*val make_link_options: string list -> string*)
 
-val setup : out_channel -> status
-val num_lines : out_channel -> int
-val backup : out_channel -> int -> unit
-val standout : out_channel -> bool -> unit
-val resume : out_channel -> int -> unit
+type link_mode =
+  | Exe
+  | Dll
+  | MainDll
+  | Partial
+
+val call_linker: link_mode -> string -> string list -> string -> int
+
+val linker_is_flexlink : bool

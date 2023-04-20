@@ -2,9 +2,9 @@
 (*                                                                        *)
 (*                                 OCaml                                  *)
 (*                                                                        *)
-(*             Xavier Leroy, projet Cristal, INRIA Rocquencourt           *)
+(*                        Nicolas Ojeda Bar, LexiFi                       *)
 (*                                                                        *)
-(*   Copyright 1996 Institut National de Recherche en Informatique et     *)
+(*   Copyright 2020 Institut National de Recherche en Informatique et     *)
 (*     en Automatique.                                                    *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
@@ -13,20 +13,18 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Basic interface to the terminfo database
+type error =
+  | Truncated_file
+  | Unrecognized of string
+  | Unsupported of string * int64
+  | Out_of_range of string
 
-  {b Warning:} this module is unstable and part of
-  {{!Compiler_libs}compiler-libs}.
+val error_to_string: error -> string
 
-*)
+type t
 
-type status =
-  | Uninitialised
-  | Bad_term
-  | Good_term
+val read: string -> (t, error) Result.t
 
-val setup : out_channel -> status
-val num_lines : out_channel -> int
-val backup : out_channel -> int -> unit
-val standout : out_channel -> bool -> unit
-val resume : out_channel -> int -> unit
+val defines_symbol: t -> string -> bool
+
+val symbol_offset: t -> string -> int64 option
