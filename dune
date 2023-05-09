@@ -6,116 +6,11 @@
   (flags
    (:standard -warn-error -A -w -58))))
 
-(copy_files# parsing/*.ml{,i})
-
-(copy_files# typing/*.ml{,i})
-
-(copy_files# utils/*.ml{,i})
-
-(copy_files# file_formats/*.ml{,i})
-
 (executable
  (name main)
  (package otp)
  (public_name main)
  (preprocess
   (pps ppx_expect ppx_deriving.show))
- (modules_without_implementation
-  annot
-  asttypes
-  cmo_format
-  outcometree
-  parsetree)
- (modules
-  test
-  main
-  main2
-  infertypes
-  ;; TYPING
-  ident
-  path
-  primitive
-  types
-  btype
-  oprint
-  subst
-  predef
-  datarepr
-  cmi_format
-  persistent_env
-  env
-  type_immediacy
-  typedtree
-  printtyped
-  ctype
-  printtyp
-  includeclass
-  mtype
-  envaux
-  includecore
-  tast_iterator
-  tast_mapper
-  cmt_format
-  untypeast
-  includemod
-  typetexp
-  patterns
-  printpat
-  parmatch
-  stypes
-  typedecl
-  typeopt
-  rec_check
-  typecore
-  typeclass
-  typemod
-  typedecl_variance
-  typedecl_properties
-  typedecl_immediacy
-  typedecl_unboxed
-  typedecl_separability
-  cmt2annot
-  ; manual update: mli only files
-  annot
-  outcometree
-  ;; UTILS
-  config
-  build_path_prefix_map
-  misc
-  identifiable
-  numbers
-  arg_helper
-  clflags
-  profile
-  terminfo
-  ccomp
-  warnings
-  consistbl
-  strongly_connected_components
-  targetint
-  load_path
-  int_replace_polymorphic_compare
-  binutils
-  local_store
-  ;; PARSING
-  location
-  longident
-  docstrings
-  syntaxerr
-  ast_helper
-  camlinternalMenhirLib
-  parser
-  lexer
-  parse
-  printast
-  pprintast
-  ast_mapper
-  ast_iterator
-  attr_helper
-  builtin_attributes
-  ast_invariants
-  depend
-  ; manual update: mli only files
-  asttypes
-  parsetree)
- (libraries stdio))
+ (modules test main main2 infertypes)
+ (libraries stdio ocaml-compiler-libs.common yojson))
