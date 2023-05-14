@@ -23,8 +23,6 @@ type typ =
   | TTuple of typ list * lvls * reasons
 
 and tv = Unbound of name * lvl * reasons | Link of typ * reasons
-
-(* new_lvl и есть настоящий lvl, old_lvl нужен для непотребства с occurs check у составных типов*)
 and lvls = { mutable old_lvl : lvl; mutable new_lvl : lvl }
 
 and reason =
@@ -75,7 +73,6 @@ let rec_dec loc = reasons @@ RecDef loc
 let res_of_apply f args loc = reasons @@ ResultOfApply (f, args, loc)
 
 let rec map_reasons f = function
-  (* ?????????????? *)
   | TVar (({ contents = Unbound (name, lvl, u_tr) } as tvr), _) as t ->
       tvr := Unbound (name, lvl, f u_tr);
       t
@@ -111,7 +108,7 @@ let rec repr = function
 let get_lvl : typ -> lvl = function
   | TVar ({ contents = Unbound (_, l, _) }, _) -> l
   | TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _) -> ls.new_lvl
-  | _ -> generic_lvl
+  | _ -> 0
 
 let gensym_counter = ref 0
 let reset_gensym () = gensym_counter := 0
@@ -198,7 +195,7 @@ let force_lvls_update () =
     | (TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _))
       when ls.old_lvl = ls.new_lvl ->
         acc
-    | TArrow (ty1, ty2, ls, (* tr сделать LvlUpdate *) _) ->
+    | TArrow (ty1, ty2, ls, _) ->
         let lvl = ls.new_lvl in
         ls.new_lvl <- marked_lvl;
         let acc = helper acc lvl ty1 in
@@ -275,8 +272,7 @@ let gen t =
     | TVar (({ contents = Unbound (name, l, tr) } as tvr), _) when l > !curr_lvl
       ->
         tvr := Unbound (name, generic_lvl, tr)
-    | TArrow (t1, t2, ls, (* tr сделать LvlUpdate *) _)
-      when ls.new_lvl > !curr_lvl ->
+    | TArrow (t1, t2, ls, _) when ls.new_lvl > !curr_lvl ->
         let t1 = repr t1 and t2 = repr t2 in
         helper t1;
         helper t2;
@@ -395,7 +391,7 @@ let tof =
       | Ppat_interval (c1, c2) ->
           let c = match_const c1 in
           if eq_const c1 c2 then (tgronud c (pat_interval_const c loc), env)
-          else failwith ""
+          else failwith "interval patern fail"
       | Ppat_tuple ps ->
           let ts, env =
             List.fold_right
@@ -405,7 +401,7 @@ let tof =
               ps ([], env)
           in
           (new_tuple ts (pat_tuple loc), env)
-      | _ -> failwith ""
+      | _ -> failwith "unexpected patern"
     in
     match expr with
     | Pexp_constant c ->
@@ -436,43 +432,44 @@ let tof =
         in
         unify t_fun t_args;
         t_res
+    | Pexp_let (Recursive, v_bs, expr) ->
+        (* Очень сильно тянет на рекурсию, которая не работает *)
+        let env =
+          List.fold_left
+            (fun env v ->
+              enter_lvl ();
+              let p = v.pvb_pat in
+              let e = v.pvb_expr in
+
+              let rec_t = gen_fun (count_of_args e.pexp_desc) loc in
+              let env =
+                match p.ppat_desc with
+                | Ppat_var id -> (id.txt, rec_t) :: env
+                | _ -> failwith "rec"
+              in
+              let t_e = helper env e in
+              leave_lvl ();
+              gen t_e;
+              env)
+            env v_bs
+        in
+        helper env expr
     | Pexp_let (Nonrecursive, v_bs, expr) ->
         let env =
           List.fold_left
             (fun env v ->
               enter_lvl ();
-              let p = v.pvb_pat in
               let e = v.pvb_expr in
-              let t_arg, env = ppat env p in
-              (* сделать тюплы *)
+              let p = v.pvb_pat in
               let t_e = helper env e in
-              unify t_arg t_e;
+              let arg, env = ppat env p in
+              unify t_e arg;
               leave_lvl ();
+              gen t_e;
               env)
             env v_bs
         in
         helper env expr
-    (* | Pexp_let (Recursive, v_bs, expr) ->
-        let env =
-          List.fold_left
-            (fun env v ->
-              enter_lvl ();
-              let p = v.pvb_pat in
-              let e = v.pvb_expr in
-              let env =
-                match p.ppat_desc with
-                | Ppat_var var ->
-                    (var.txt, gen_fun (count_of_args e.pexp_desc) loc) :: env
-                | _ -> failwith ""
-              in
-              let t_arg, env = ppat env p in
-              let t_e = helper env e in
-              unify t_arg t_e;
-              leave_lvl ();
-              env)
-            env v_bs
-        in
-        helper env expr *)
     | Pexp_match (expr, cs) ->
         let e_match = helper env expr in
         List.fold_left
@@ -487,7 +484,7 @@ let tof =
                | Some e -> (match helper env e with _ -> ())); *))
           (newvar () (res_of_pm loc))
           cs
-    | _ -> failwith ""
+    | _ -> failwith "unexo expr"
   in
   helper
 
@@ -536,10 +533,27 @@ let foo (a, b) =
 in
   foo (1, 2)|}
 
-let code5 = {| 1 "123" |}
-let code = Parse.implementation (Lexing.from_string code4)
+let code5 = {| 
+    let (a, b) = 
+      ("123", 1) 
+    in 
+    b|}
+
+let code6 =
+  {|
+  let rec foo x = 
+    match x with 
+    | 1 -> 1
+    | y -> foo y 
+  in
+  foo|}
+
+let code = Parse.implementation (Lexing.from_string code6)
 let ncode = match List.hd code with { pstr_desc = desc; _ } -> desc
-let ncode = match ncode with Pstr_eval (exp, _) -> exp | _ -> failwith ""
+
+let ncode =
+  match ncode with Pstr_eval (exp, _) -> exp | _ -> failwith "toplvl"
+
 let t = top_infer ncode
 
 let () =
