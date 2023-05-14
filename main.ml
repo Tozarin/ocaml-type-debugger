@@ -33,6 +33,7 @@ and reason =
   | NoReason
   | ResultOf of name * loc
   | ResultOfWithoutName of loc
+  | ResultOfApply of typ * typ list * loc
   | LetExpr of name * loc
   | NamelessFunction of loc
   | InitTuple of loc
@@ -42,7 +43,7 @@ and reason =
   | PatTuple of loc
   | ResOfPatMatch of loc
   | ArgOf of int * loc
-  | ApplyAs of int * loc
+  | ApplyAs of int * typ * loc
   | RecDef of loc
 
 and reasons = reason list [@@deriving show { with_path = false }]
@@ -71,9 +72,16 @@ let pat_tuple loc = reasons @@ PatTuple loc
 let res_of_pm loc = reasons @@ ResOfPatMatch loc
 let arg_of n loc = reasons @@ ArgOf (n, loc)
 let rec_dec loc = reasons @@ RecDef loc
+let res_of_apply f args loc = reasons @@ ResultOfApply (f, args, loc)
 
-let map_reasons f = function
-  | TVar (t, tr) -> TVar (t, f tr)
+let rec map_reasons f = function
+  (* ?????????????? *)
+  | TVar (({ contents = Unbound (name, lvl, u_tr) } as tvr), _) as t ->
+      tvr := Unbound (name, lvl, f u_tr);
+      t
+  | TVar (({ contents = Link (l_t, l_tr) } as tvr), _) as t ->
+      tvr := Link (map_reasons f l_t, l_tr);
+      t
   | TArrow (t1, t2, l, tr) -> TArrow (t1, t2, l, f tr)
   | TGround (t, tr) -> TGround (t, f tr)
   | TPoly (name, ts, lvls, tr) -> TPoly (name, ts, lvls, f tr)
@@ -416,18 +424,17 @@ let tof =
         new_arrow t_arg t_body (nl_fun loc)
     | Pexp_apply (expr, args) ->
         let t_fun = helper env expr in
-        let t_fun = add_arg_reason t_fun loc in
-        let t_res = newvar () (res_of_nameless loc) in
-        let t_args, _ =
-          List.fold_right
-            (fun arg (acc, n) ->
-              let arg = helper env (snd arg) in
-              let arg = add_reason arg (ApplyAs (n, expr.pexp_loc)) in
-              (arg :: acc, n - 1))
+        let t_args =
+          List.mapi
+            (fun i (_, e) ->
+              add_reason (helper env e) (ApplyAs (i + 1, t_fun, loc)))
             args
-            ([ t_res ], List.length args)
         in
-        List.iter2 unify t_fun t_args;
+        let t_res = newvar () (res_of_apply t_fun t_args loc) in
+        let t_args =
+          List.fold_right (fun e acc -> new_arrow e acc no_reason) t_args t_res
+        in
+        unify t_fun t_args;
         t_res
     | Pexp_let (Nonrecursive, v_bs, expr) ->
         let env =
@@ -529,7 +536,8 @@ let foo (a, b) =
 in
   foo (1, 2)|}
 
-let code = Parse.implementation (Lexing.from_string code)
+let code5 = {| 1 "123" |}
+let code = Parse.implementation (Lexing.from_string code4)
 let ncode = match List.hd code with { pstr_desc = desc; _ } -> desc
 let ncode = match ncode with Pstr_eval (exp, _) -> exp | _ -> failwith ""
 let t = top_infer ncode
