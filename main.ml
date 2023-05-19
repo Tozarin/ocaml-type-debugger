@@ -43,13 +43,14 @@ and reason =
   | ArgOf of int * loc
   | ApplyAs of int * typ * loc
   | RecDef of loc
+  | PLACEHOLDER
 
 and reasons = reason list [@@deriving show { with_path = false }]
 
 let unbound name lvl rs = Unbound (name, lvl, rs)
 let link t rs = Link (t, rs)
 let tvar_unbound unb rs = TVar (ref unb, rs)
-let tvar_link link rs = TVar (link, rs)
+let tvar_link link rs = TVar (ref link, rs)
 let tarrow t1 t2 lvls r = TArrow (t1, t2, lvls, r)
 let tgronud t rs = TGround (t, rs)
 let tpoly name ts lvls rs = TPoly (name, ts, lvls, rs)
@@ -72,20 +73,33 @@ let arg_of n loc = reasons @@ ArgOf (n, loc)
 let rec_dec loc = reasons @@ RecDef loc
 let res_of_apply f args loc = reasons @@ ResultOfApply (f, args, loc)
 
-let rec map_reasons f = function
+let rec map_reason f = function
   | TVar (({ contents = Unbound (name, lvl, u_tr) } as tvr), _) as t ->
       tvr := Unbound (name, lvl, f u_tr);
       t
   | TVar (({ contents = Link (l_t, l_tr) } as tvr), _) as t ->
-      tvr := Link (map_reasons f l_t, l_tr);
+      tvr := Link (map_reason f l_t, l_tr);
       t
   | TArrow (t1, t2, l, tr) -> TArrow (t1, t2, l, f tr)
   | TGround (t, tr) -> TGround (t, f tr)
   | TPoly (name, ts, lvls, tr) -> TPoly (name, ts, lvls, f tr)
   | TTuple (ts, lvls, tr) -> TTuple (ts, lvls, f tr)
 
-let concat_reasons t tr = map_reasons (fun tr' -> tr' @ tr) t
-let add_reason t r = map_reasons (fun ts -> r :: ts) t
+let rec map_reasons f = function
+  | TVar ({ contents = Unbound (name, lvl, u_tr) }, v_tr) ->
+      tvar_unbound (unbound name lvl (f u_tr)) (f v_tr)
+  | TVar ({ contents = Link (l_t, l_tr) }, v_tr) ->
+      tvar_link (link (map_reasons f l_t) (f l_tr)) (f v_tr)
+  | TArrow (t1, t2, l, tr) ->
+      TArrow (map_reasons f t1, map_reasons f t2, l, f tr)
+  | TGround (t, tr) -> TGround (t, f tr)
+  | TPoly (name, ts, lvls, tr) ->
+      TPoly (name, List.map (map_reasons f) ts, lvls, f tr)
+  | TTuple (ts, lvls, tr) -> TTuple (List.map (map_reasons f) ts, lvls, f tr)
+
+let clear_reasons = map_reasons (fun _ -> [])
+let concat_reasons t tr = map_reason (fun tr' -> tr' @ tr) t
+let add_reason t r = map_reason (fun ts -> r :: ts) t
 
 let take_reasons = function
   | TVar (_, tr) -> tr
@@ -94,7 +108,7 @@ let take_reasons = function
   | TPoly (_, _, _, tr) -> tr
   | TTuple (_, _, tr) -> tr
 
-let new_reasons t rs = map_reasons (fun _ -> rs) t
+let new_reasons t rs = map_reason (fun _ -> rs) t
 let generic_lvl = 100500
 let marked_lvl = -1
 
@@ -306,7 +320,7 @@ let inst =
           (t, (name, t) :: sb))
     | TVar ({ contents = Link (t, tr) }, tr_tvar) ->
         (* helper sb (concat_reasons t (tr_tvar @ tr)) *)
-        helper sb (map_reasons (fun _ -> tr_tvar @ tr) t)
+        helper sb (map_reason (fun _ -> tr_tvar @ tr) t)
     | TArrow (t1, t2, ls, tr) when ls.new_lvl = generic_lvl ->
         let t1, sb = helper sb t1 in
         let t2, sb = helper sb t2 in
@@ -423,7 +437,8 @@ let tof =
         let t_args =
           List.mapi
             (fun i (_, e) ->
-              add_reason (helper env e) (ApplyAs (i + 1, t_fun, loc)))
+              add_reason (helper env e)
+                (ApplyAs (i + 1, clear_reasons t_fun, loc)))
             args
         in
         let t_res = newvar () (res_of_apply t_fun t_args loc) in
@@ -433,14 +448,12 @@ let tof =
         unify t_fun t_args;
         t_res
     | Pexp_let (Recursive, v_bs, expr) ->
-        (* Очень сильно тянет на рекурсию, которая не работает *)
         let env =
           List.fold_left
             (fun env v ->
               enter_lvl ();
               let p = v.pvb_pat in
               let e = v.pvb_expr in
-
               let rec_t = gen_fun (count_of_args e.pexp_desc) loc in
               let env =
                 match p.ppat_desc with
@@ -448,6 +461,7 @@ let tof =
                 | _ -> failwith "rec"
               in
               let t_e = helper env e in
+              unify t_e rec_t;
               leave_lvl ();
               gen t_e;
               env)
@@ -548,7 +562,8 @@ let code6 =
   in
   foo|}
 
-let code = Parse.implementation (Lexing.from_string code6)
+let code7 = {|let foo x = 1 in foo 1|}
+let code = Parse.implementation (Lexing.from_string code4)
 let ncode = match List.hd code with { pstr_desc = desc; _ } -> desc
 
 let ncode =
