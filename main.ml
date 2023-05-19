@@ -1,114 +1,8 @@
-open Location
-open Warnings
 open Parsetree
+open Location
+open Infertypes
+open Res
 
-type name = string
-and lvl = int
-
-and ground_typ = Int | String | Char | Bool | Float
-[@@deriving show { with_path = false }]
-
-let int_t = Int
-let string_t = String
-let char_t = Char
-let bool_t = Bool
-let float_t = Float
-let pp_loc = Location.print_loc
-
-type typ =
-  | TVar of tv ref * reasons
-  | TArrow of typ * typ * lvls * reasons
-  | TPoly of name * typ list * lvls * reasons
-  | TGround of ground_typ * reasons
-  | TTuple of typ list * lvls * reasons
-
-and tv = Unbound of name * lvl * reasons | Link of typ * reasons
-and lvls = { mutable old_lvl : lvl; mutable new_lvl : lvl }
-
-and reason =
-  | InitConst of ground_typ * loc
-  | InitVar of name * loc
-  | NoReason
-  | ResultOf of name * loc
-  | ResultOfWithoutName of loc
-  | ResultOfApply of typ * typ list * loc
-  | LetExpr of name * loc
-  | NamelessFunction of loc
-  | InitTuple of loc
-  | PatAnyVar of loc
-  | PatConst of ground_typ * loc
-  | PatIntervalConst of ground_typ * loc
-  | PatTuple of loc
-  | ResOfPatMatch of loc
-  | ArgOf of int * loc
-  | ApplyAs of int * typ * loc
-  | RecDef of loc
-  | PLACEHOLDER
-
-and reasons = reason list [@@deriving show { with_path = false }]
-
-let unbound name lvl rs = Unbound (name, lvl, rs)
-let link t rs = Link (t, rs)
-let tvar_unbound unb rs = TVar (ref unb, rs)
-let tvar_link link rs = TVar (ref link, rs)
-let tarrow t1 t2 lvls r = TArrow (t1, t2, lvls, r)
-let tgronud t rs = TGround (t, rs)
-let tpoly name ts lvls rs = TPoly (name, ts, lvls, rs)
-let ttuple ts lvls rs = TTuple (ts, lvls, rs)
-let reasons r = [ r ]
-let init_const t loc = reasons @@ InitConst (t, loc)
-let init_var name loc = reasons @@ InitVar (name, loc)
-let no_reason = reasons @@ NoReason
-let result_of name loc = reasons @@ ResultOf (name, loc)
-let res_of_nameless loc = reasons @@ ResultOfWithoutName loc
-let let_expr name loc = reasons @@ LetExpr (name, loc)
-let nl_fun loc = reasons @@ NamelessFunction loc
-let init_tuple loc = reasons @@ InitTuple loc
-let pat_any loc = reasons @@ PatAnyVar loc
-let pat_const t loc = reasons @@ PatConst (t, loc)
-let pat_interval_const t loc = reasons @@ PatIntervalConst (t, loc)
-let pat_tuple loc = reasons @@ PatTuple loc
-let res_of_pm loc = reasons @@ ResOfPatMatch loc
-let arg_of n loc = reasons @@ ArgOf (n, loc)
-let rec_dec loc = reasons @@ RecDef loc
-let res_of_apply f args loc = reasons @@ ResultOfApply (f, args, loc)
-
-let rec map_reason f = function
-  | TVar (({ contents = Unbound (name, lvl, u_tr) } as tvr), _) as t ->
-      tvr := Unbound (name, lvl, f u_tr);
-      t
-  | TVar (({ contents = Link (l_t, l_tr) } as tvr), _) as t ->
-      tvr := Link (map_reason f l_t, l_tr);
-      t
-  | TArrow (t1, t2, l, tr) -> TArrow (t1, t2, l, f tr)
-  | TGround (t, tr) -> TGround (t, f tr)
-  | TPoly (name, ts, lvls, tr) -> TPoly (name, ts, lvls, f tr)
-  | TTuple (ts, lvls, tr) -> TTuple (ts, lvls, f tr)
-
-let rec map_reasons f = function
-  | TVar ({ contents = Unbound (name, lvl, u_tr) }, v_tr) ->
-      tvar_unbound (unbound name lvl (f u_tr)) (f v_tr)
-  | TVar ({ contents = Link (l_t, l_tr) }, v_tr) ->
-      tvar_link (link (map_reasons f l_t) (f l_tr)) (f v_tr)
-  | TArrow (t1, t2, l, tr) ->
-      TArrow (map_reasons f t1, map_reasons f t2, l, f tr)
-  | TGround (t, tr) -> TGround (t, f tr)
-  | TPoly (name, ts, lvls, tr) ->
-      TPoly (name, List.map (map_reasons f) ts, lvls, f tr)
-  | TTuple (ts, lvls, tr) -> TTuple (List.map (map_reasons f) ts, lvls, f tr)
-
-let clear_reasons = map_reasons (fun _ -> [])
-let concat_reasons t tr = map_reason (fun tr' -> tr' @ tr) t
-let add_reason t r = map_reason (fun ts -> r :: ts) t
-
-let take_reasons = function
-  | TVar (_, tr) -> tr
-  | TArrow (_, _, _, tr) -> tr
-  | TGround (_, tr) -> tr
-  | TPoly (_, _, _, tr) -> tr
-  | TTuple (_, _, tr) -> tr
-
-let new_reasons t rs = map_reason (fun _ -> rs) t
 let generic_lvl = 100500
 let marked_lvl = -1
 
@@ -157,37 +51,39 @@ let new_poly name ts rs =
 let new_tuple ts rs = ttuple ts { new_lvl = !curr_lvl; old_lvl = !curr_lvl } rs
 
 let rec cyc_free = function
-  | TVar ({ contents = Unbound _ }, _) | TGround _ -> ()
+  | TVar ({ contents = Unbound _ }, _) | TGround _ -> return ()
   | TVar ({ contents = Link (ty, _) }, _) -> cyc_free ty
   | (TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _))
     when ls.new_lvl = marked_lvl ->
-      failwith "occurs chek"
+      occurs_fail
   | TArrow (t1, t2, ls, _) ->
       let lvl = ls.new_lvl in
       ls.new_lvl <- marked_lvl;
-      cyc_free t1;
-      cyc_free t2;
-      ls.new_lvl <- lvl
+      cyc_free t1 *> cyc_free t2 *> return (ls.new_lvl <- lvl)
   | TPoly (_, ts, ls, _) | TTuple (ts, ls, _) ->
       let lvl = ls.new_lvl in
       ls.new_lvl <- marked_lvl;
-      List.iter cyc_free ts;
-      ls.new_lvl <- lvl
+      List.fold_left (fun acc t -> acc *> cyc_free t) (return ()) ts
+      *> return (ls.new_lvl <- lvl)
 
 let lvls_to_update = ref []
 let reset_lvls_to_update () = lvls_to_update := []
 
 let update_lvl l = function
   | TVar (({ contents = Unbound (t, l', tr) } as tvr), _) ->
-      assert (not (l' = generic_lvl));
-      if l < l' then tvr := Unbound (t, l, tr)
+      if l' = generic_lvl then miss_invar
+      else if l < l' then return (tvr := Unbound (t, l, tr))
+      else return ()
   | (TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _)) as t ->
-      assert (not (ls.new_lvl = generic_lvl));
-      if ls.new_lvl = marked_lvl then failwith "occurs check";
-      if l < ls.new_lvl then (
-        if ls.new_lvl = ls.old_lvl then lvls_to_update := t :: !lvls_to_update;
-        ls.new_lvl <- l)
-  | _ -> ()
+      if ls.new_lvl = generic_lvl then miss_invar
+      else if ls.new_lvl = marked_lvl then occurs_fail
+      else if l < ls.new_lvl then
+        if ls.new_lvl = ls.old_lvl then
+          return (lvls_to_update := t :: !lvls_to_update)
+          *> return (ls.new_lvl <- l)
+        else return ()
+      else return ()
+  | _ -> return ()
 
 let force_lvls_update () =
   let rec helper acc level ty =
@@ -197,7 +93,7 @@ let force_lvls_update () =
         acc
     | (TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _))
       when ls.new_lvl = marked_lvl ->
-        failwith "occurs check"
+        occurs_fail
     | (TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _)) as ty ->
         if ls.new_lvl > level then ls.new_lvl <- level;
         update_one acc ty
@@ -205,7 +101,8 @@ let force_lvls_update () =
   and update_one acc = function
     | (TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _)) as ty
       when ls.old_lvl <= !curr_lvl ->
-        ty :: acc
+        let* acc in
+        return (ty :: acc)
     | (TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _))
       when ls.old_lvl = ls.new_lvl ->
         acc
@@ -226,61 +123,57 @@ let force_lvls_update () =
         acc
     | _ -> assert false
   in
-  lvls_to_update := List.fold_left update_one [] !lvls_to_update
+  let* ls_to_update = List.fold_left update_one (return []) !lvls_to_update in
+  return (lvls_to_update := ls_to_update)
 
 let rec unify t1 t2 =
-  if t1 == t2 then ()
+  if t1 == t2 then return ()
   else
     match (repr t1, repr t2) with
     | ( (TVar (({ contents = Unbound (_, l1, tr1) } as tv1), _) as t1),
         (TVar (({ contents = Unbound (_, l2, tr2) } as tv2), _) as t2) ) ->
-        if tv1 == tv2 then ()
-        else if l1 > l2 then tv1 := Link (t2, tr2 @ tr1)
-        else tv2 := Link (t1, tr1 @ tr2)
+        if tv1 == tv2 then return ()
+        else if l1 > l2 then return (tv1 := Link (t2, tr2 @ tr1))
+        else return (tv2 := Link (t1, tr1 @ tr2))
     | TVar (({ contents = Unbound (_, l, tr) } as tv), _), t
     | t, TVar (({ contents = Unbound (_, l, tr) } as tv), _) ->
-        update_lvl l t;
-        tv := Link (t, take_reasons t @ tr)
+        update_lvl l t *> return (tv := Link (t, take_reasons t @ tr))
     | TArrow (l_ty1, l_ty2, l_ls, _), TArrow (r_ty1, r_ty2, r_ls, _) ->
         if l_ls.new_lvl = marked_lvl || r_ls.new_lvl = marked_lvl then
-          failwith "occurse check"
+          occurs_fail
         else
           let min_level = min l_ls.new_lvl r_ls.new_lvl in
           l_ls.new_lvl <- marked_lvl;
           r_ls.new_lvl <- marked_lvl;
-          unify_lev min_level l_ty1 r_ty1;
-          unify_lev min_level l_ty2 r_ty2;
-          l_ls.new_lvl <- min_level;
-          r_ls.new_lvl <- min_level
+          unify_lev min_level l_ty1 r_ty1
+          *> unify_lev min_level l_ty2 r_ty2
+          *> return
+               (l_ls.new_lvl <- min_level;
+                r_ls.new_lvl <- min_level)
     | TPoly (l_name, _, _, _), TPoly (r_name, _, _, _) when l_name != r_name ->
-        let open Format in
-        pp_typ std_formatter t1;
-        pp_typ std_formatter t2;
-        failwith "unify"
+        unify_fail t1 t2
     | TPoly (_, l_ts, l_ls, _), TPoly (_, r_ts, r_ls, _)
     | TTuple (l_ts, l_ls, _), TTuple (r_ts, r_ls, _) ->
         if l_ls.new_lvl = marked_lvl || r_ls.new_lvl = marked_lvl then
-          failwith "cycle: occurs check";
-        let min_level = min l_ls.new_lvl r_ls.new_lvl in
-        l_ls.new_lvl <- marked_lvl;
-        r_ls.new_lvl <- marked_lvl;
-        List.iter2 (fun l_t r_t -> unify_lev min_level l_t r_t) l_ts r_ts;
-        l_ls.new_lvl <- min_level;
-        r_ls.new_lvl <- min_level
-    | TGround (t1, _), TGround (t2, _) when t1 = t2 -> ()
-    | _ ->
-        let open Format in
-        pp_typ std_formatter t1;
-        pp_typ std_formatter t2;
-        failwith "unfiy"
+          occurs_fail
+        else
+          let min_level = min l_ls.new_lvl r_ls.new_lvl in
+          l_ls.new_lvl <- marked_lvl;
+          r_ls.new_lvl <- marked_lvl;
+          List.fold_left2
+            (fun acc l_t r_t -> acc *> unify_lev min_level l_t r_t)
+            (return ()) l_ts r_ts
+          *> return
+               (l_ls.new_lvl <- min_level;
+                r_ls.new_lvl <- min_level)
+    | TGround (t1, _), TGround (t2, _) when t1 = t2 -> return ()
+    | _ -> unify_fail t1 t2
 
 and unify_lev l ty1 ty2 =
   let ty1 = repr ty1 in
-  update_lvl l ty1;
-  unify ty1 ty2
+  update_lvl l ty1 *> unify ty1 ty2
 
 let gen t =
-  force_lvls_update ();
   let rec helper t =
     match repr t with
     | TVar (({ contents = Unbound (name, l, tr) } as tvr), _) when l > !curr_lvl
@@ -306,7 +199,7 @@ let gen t =
         ls.new_lvl <- l
     | _ -> ()
   in
-  helper t
+  force_lvls_update () *> return (helper t)
 
 type env = (name * typ) list
 
@@ -387,136 +280,161 @@ let gen_fun n loc =
   in
   helper n
 
+let rec ppat env p =
+  let loc = p.ppat_loc in
+  match p.ppat_desc with
+  | Ppat_any -> return (newvar () (pat_any loc), env)
+  | Ppat_var var ->
+      let t = newvar () (pat_any loc) in
+      return (t, (var.txt, t) :: env)
+  | Ppat_constant c ->
+      let c = match_const c in
+      return (tgronud c (pat_const c loc), env)
+  | Ppat_interval (c1, c2) ->
+      let c = match_const c1 in
+      if eq_const c1 c2 then return (tgronud c (pat_interval_const c loc), env)
+      else interval_pat_fail
+  | Ppat_tuple ps ->
+      let* ts, env =
+        List.fold_right
+          (fun p acc ->
+            let* acc, env = acc in
+            let* t, env = ppat env p in
+            return (t :: acc, env))
+          ps
+          (return ([], env))
+      in
+      return (new_tuple ts (pat_tuple loc), env)
+  | _ -> not_impl_pat
+
 let tof =
-  let rec helper : env -> expression -> typ =
+  let rec helper : env -> expression -> typ Res.t =
    fun env expr ->
     let loc = expr.pexp_loc in
     let expr = expr.pexp_desc in
-    let rec ppat env p =
-      let loc = p.ppat_loc in
-      match p.ppat_desc with
-      | Ppat_any -> (newvar () (pat_any loc), env)
-      | Ppat_var var ->
-          let t = newvar () (pat_any loc) in
-          (t, (var.txt, t) :: env)
-      | Ppat_constant c ->
-          let c = match_const c in
-          (tgronud c (pat_const c loc), env)
-      | Ppat_interval (c1, c2) ->
-          let c = match_const c1 in
-          if eq_const c1 c2 then (tgronud c (pat_interval_const c loc), env)
-          else failwith "interval patern fail"
-      | Ppat_tuple ps ->
-          let ts, env =
-            List.fold_right
-              (fun p (acc, env) ->
-                let t, env = ppat env p in
-                (t :: acc, env))
-              ps ([], env)
-          in
-          (new_tuple ts (pat_tuple loc), env)
-      | _ -> failwith "unexpected patern"
-    in
     match expr with
     | Pexp_constant c ->
         let c = match_const c in
-        tgronud c (init_const c loc)
+        return @@ tgronud c (init_const c loc)
     | Pexp_ident id ->
         let id = String.concat "." (Longident.flatten id.txt) in
-        let t = inst (List.assoc id env) in
-        concat_reasons t (result_of id loc)
+        let* t =
+          try return @@ inst (List.assoc id env) with Not_found -> no_fun id
+        in
+        return @@ concat_reasons t (result_of id loc)
     | Pexp_tuple es ->
-        let ts = List.fold_right (fun e acc -> helper env e :: acc) es [] in
-        new_tuple ts (init_tuple loc)
+        let* ts =
+          List.fold_right
+            (fun e acc ->
+              let* acc in
+              let* e = helper env e in
+              return (e :: acc))
+            es (return [])
+        in
+        return @@ new_tuple ts (init_tuple loc)
     | Pexp_fun (_, _, arg, body) ->
-        let t_arg, env = ppat env arg in
-        let t_body = helper env body in
-        new_arrow t_arg t_body (nl_fun loc)
+        let* t_arg, env = ppat env arg in
+        let* t_body = helper env body in
+        return @@ new_arrow t_arg t_body (nl_fun loc)
     | Pexp_apply (expr, args) ->
-        let t_fun = helper env expr in
-        let t_args =
-          List.mapi
-            (fun i (_, e) ->
-              add_reason (helper env e)
-                (ApplyAs (i + 1, clear_reasons t_fun, loc)))
+        let* t_fun = helper env expr in
+        let* _, t_args =
+          List.fold_right
+            (fun (_, e) acc ->
+              let* i, acc = acc in
+              let* e = helper env e in
+              let arg = add_reason e (ApplyAs (i, clear_reasons t_fun, loc)) in
+              return (i + 1, arg :: acc))
             args
+            (return (1, []))
         in
         let t_res = newvar () (res_of_apply t_fun t_args loc) in
         let t_args =
           List.fold_right (fun e acc -> new_arrow e acc no_reason) t_args t_res
         in
-        unify t_fun t_args;
-        t_res
+        unify t_fun t_args *> return t_res
     | Pexp_let (Recursive, v_bs, expr) ->
-        let env =
+        let* env =
           List.fold_left
             (fun env v ->
               enter_lvl ();
               let p = v.pvb_pat in
               let e = v.pvb_expr in
               let rec_t = gen_fun (count_of_args e.pexp_desc) loc in
-              let env =
+              let* env in
+              let* env =
                 match p.ppat_desc with
-                | Ppat_var id -> (id.txt, rec_t) :: env
-                | _ -> failwith "rec"
+                | Ppat_any -> return env
+                | Ppat_var id -> return ((id.txt, rec_t) :: env)
+                | _ -> rec_no_impl
               in
-              let t_e = helper env e in
-              unify t_e rec_t;
-              leave_lvl ();
-              gen t_e;
-              env)
-            env v_bs
+              let* t_e = helper env e in
+              unify t_e rec_t *> return (leave_lvl ()) *> gen t_e *> return env)
+            (return env) v_bs
         in
         helper env expr
     | Pexp_let (Nonrecursive, v_bs, expr) ->
-        let env =
+        let* env =
           List.fold_left
             (fun env v ->
               enter_lvl ();
               let e = v.pvb_expr in
               let p = v.pvb_pat in
-              let t_e = helper env e in
-              let arg, env = ppat env p in
-              unify t_e arg;
-              leave_lvl ();
-              gen t_e;
-              env)
-            env v_bs
+              let* env in
+              let* t_e = helper env e in
+              let* arg, env = ppat env p in
+              unify t_e arg *> return (leave_lvl ()) *> gen t_e *> return env)
+            (return env) v_bs
         in
         helper env expr
     | Pexp_match (expr, cs) ->
-        let e_match = helper env expr in
+        let* e_match = helper env expr in
         List.fold_left
           (fun acc case ->
-            let p_t, env = ppat env case.pc_lhs in
-            unify e_match p_t;
-            let case_e = helper env case.pc_rhs in
-            unify (inst acc) case_e;
-            acc
+            let* acc in
+            let* p_t, env = ppat env case.pc_lhs in
+            unify e_match p_t
+            *> let* case_e = helper env case.pc_rhs in
+               unify (inst acc) case_e *> return acc
             (* match case.pc_guard with
                | None -> ()
                | Some e -> (match helper env e with _ -> ())); *))
-          (newvar () (res_of_pm loc))
+          (return (newvar () (res_of_pm loc)))
           cs
-    | _ -> failwith "unexo expr"
+    | _ -> no_impl_expr
   in
   helper
 
-let list =
-  let x = tvar_unbound (unbound "x" !curr_lvl []) [] in
-  new_arrow x (new_arrow x (new_poly "list" [ x ] []) []) []
-
-let plus =
-  new_arrow (tgronud int_t [])
-    (new_arrow (tgronud int_t []) (tgronud int_t []) [])
-    []
-
-let top_infer expr =
-  reset_typ_vars ();
-  reset_lvls_to_update ();
-  let t = tof [ ("ll", list); ("+", plus) ] expr in
-  cyc_free t;
-  t
+let let_value env loc = function
+  | Pstr_value (Recursive, v_bs) ->
+      List.fold_left
+        (fun env v ->
+          enter_lvl ();
+          let p = v.pvb_pat in
+          let e = v.pvb_expr in
+          let rec_t = gen_fun (count_of_args e.pexp_desc) loc in
+          let* env in
+          let* env =
+            match p.ppat_desc with
+            | Ppat_any -> return env
+            | Ppat_var id -> return ((id.txt, rec_t) :: env)
+            | _ -> rec_no_impl
+          in
+          let* t_e = tof env e in
+          unify t_e rec_t *> return (leave_lvl ()) *> gen t_e *> return env)
+        (return env) v_bs
+  | Pstr_value (Nonrecursive, v_bs) ->
+      List.fold_left
+        (fun env v ->
+          enter_lvl ();
+          let e = v.pvb_expr in
+          let p = v.pvb_pat in
+          let* env in
+          let* t_e = tof env e in
+          let* arg, env = ppat env p in
+          unify t_e arg *> return (leave_lvl ()) *> gen t_e *> return env)
+        (return env) v_bs
+  | _ -> exp_let
 
 (**************************************)
 
@@ -563,15 +481,47 @@ let code6 =
   foo|}
 
 let code7 = {|let foo x = 1 in foo 1|}
-let code = Parse.implementation (Lexing.from_string code4)
-let ncode = match List.hd code with { pstr_desc = desc; _ } -> desc
 
-let ncode =
-  match ncode with Pstr_eval (exp, _) -> exp | _ -> failwith "toplvl"
+let code8 = {| 
+  let x = 1;;
 
-let t = top_infer ncode
+  let y = x in y;;
+
+  let z = "123";;
+
+  z
+|}
+
+let list =
+  let x = tvar_unbound (unbound "x" !curr_lvl []) [] in
+  new_arrow x (new_arrow x (new_poly "list" [ x ] []) []) []
+
+let plus =
+  new_arrow (tgronud int_t [])
+    (new_arrow (tgronud int_t []) (tgronud int_t []) [])
+    []
+
+let env' = [ ("ll", list); ("+", plus) ]
+
+let top_infer env expr =
+  reset_typ_vars ();
+  reset_lvls_to_update ();
+  match expr.pstr_desc with
+  | Pstr_eval (expr, _) -> (tof env expr >>| cyc_free) *> return env
+  | Pstr_value _ as v -> let_value env expr.pstr_loc v
+  | _ -> not_impl_h_lvl
+
+let codes = Parse.implementation (Lexing.from_string code2)
+
+let ts env =
+  List.fold_left
+    (fun acc s ->
+      let* env = acc in
+      top_infer env s)
+    (return env) codes
+
+let ts = ts env'
 
 let () =
   let open Format in
-  gen t;
-  pp_typ std_formatter (inst t)
+  match ts with Ok _ -> printf "Ok" | Error _ -> printf "err"

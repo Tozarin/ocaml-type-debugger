@@ -1,198 +1,166 @@
-open Location
 open Warnings
-open Lexing
 
-type typ_var_number = int [@@deriving show { with_path = false }]
-type id = string [@@deriving show { with_path = false }]
+type name = string
+and lvl = int
 
-type ground_type = Int | String | Char | Bool | Float | Unit
+and ground_typ = Int | String | Char | Bool | Float
 [@@deriving show { with_path = false }]
 
-type tr_node =
-  | TRVar of typ_var_number * reasons
-  | TRGround of ground_type * reasons
-  | TRArr of tr_node * tr_node * reasons
-  | TRTuple of tr_node list * reasons
-  | TRPoly of tr_node list * id * reasons (* 'a 'b 'c ty *)
+let int_t = Int
+let string_t = String
+let char_t = Char
+let bool_t = Bool
+let float_t = Float
+let pp_loc = Location.print_loc
+
+type typ =
+  | TVar of tv ref * reasons
+  | TArrow of typ * typ * lvls * reasons
+  | TPoly of name * typ list * lvls * reasons
+  | TGround of ground_typ * reasons
+  | TTuple of typ list * lvls * reasons
+
+and tv = Unbound of name * lvl * reasons | Link of typ * reasons
+and lvls = { mutable old_lvl : lvl; mutable new_lvl : lvl }
 
 and reason =
-  | InitConst of ground_type
-  | InitVar of typ_var_number
-  | InitTuple
-  | NlFunction
-  | RezultOf
-  | ArgumentOf of int
-  | PatConst of ground_type
-  | PatInterval of ground_type
-  | PatTuple
-  | RecFunction
+  | InitConst of ground_typ * loc
+  | InitVar of name * loc
   | NoReason
+  | ResultOf of name * loc
+  | ResultOfWithoutName of loc
+  | ResultOfApply of typ * typ list * loc
+  | LetExpr of name * loc
+  | NamelessFunction of loc
+  | InitTuple of loc
+  | PatAnyVar of loc
+  | PatConst of ground_typ * loc
+  | PatIntervalConst of ground_typ * loc
+  | PatTuple of loc
+  | ResOfPatMatch of loc
+  | ArgOf of int * loc
+  | ApplyAs of int * typ * loc
+  | RecDef of loc
 
-and loc_res = reason * loc
-and reasons = loc_res list
+and reasons = reason list [@@deriving show { with_path = false }]
 
-let tr_var n r = TRVar (n, r)
-let tr_ground t r = TRGround (t, r)
-let tr_arr t1 t2 r = TRArr (t1, t2, r)
-let tr_tuple ts r = TRTuple (ts, r)
-let tr_poly ns id r = TRPoly (ns, id, r)
-let i_cosnt t = InitConst t
-let i_var n = InitVar n
-let i_tuple = InitTuple
-let nl_fun = NlFunction
-let rez_of = RezultOf
-let arg_of n = ArgumentOf n
-let p_const t = PatConst t
-let p_interval t = PatInterval t
-let p_tuple = PatTuple
-let rec_fun = RecFunction
-let no_res = NoReason
-let loc_res r loc = (r, loc)
-let reasons r loc = [ loc_res r loc ]
+let unbound name lvl rs = Unbound (name, lvl, rs)
+let link t rs = Link (t, rs)
+let tvar_unbound unb rs = TVar (ref unb, rs)
+let tvar_link link rs = TVar (ref link, rs)
+let tarrow t1 t2 lvls r = TArrow (t1, t2, lvls, r)
+let tgronud t rs = TGround (t, rs)
+let tpoly name ts lvls rs = TPoly (name, ts, lvls, rs)
+let ttuple ts lvls rs = TTuple (ts, lvls, rs)
+let reasons r = [ r ]
+let init_const t loc = reasons @@ InitConst (t, loc)
+let init_var name loc = reasons @@ InitVar (name, loc)
+let no_reason = reasons @@ NoReason
+let result_of name loc = reasons @@ ResultOf (name, loc)
+let res_of_nameless loc = reasons @@ ResultOfWithoutName loc
+let let_expr name loc = reasons @@ LetExpr (name, loc)
+let nl_fun loc = reasons @@ NamelessFunction loc
+let init_tuple loc = reasons @@ InitTuple loc
+let pat_any loc = reasons @@ PatAnyVar loc
+let pat_const t loc = reasons @@ PatConst (t, loc)
+let pat_interval_const t loc = reasons @@ PatIntervalConst (t, loc)
+let pat_tuple loc = reasons @@ PatTuple loc
+let res_of_pm loc = reasons @@ ResOfPatMatch loc
+let arg_of n loc = reasons @@ ArgOf (n, loc)
+let rec_dec loc = reasons @@ RecDef loc
+let res_of_apply f args loc = reasons @@ ResultOfApply (f, args, loc)
 
-let map_reason n f =
-  match n with
-  | TRVar (n, rs) -> tr_var n (f rs)
-  | TRGround (gr, rs) -> tr_ground gr (f rs)
-  | TRArr (t1, t2, rs) -> tr_arr t1 t2 (f rs)
-  | TRTuple (ts, rs) -> tr_tuple ts (f rs)
-  | TRPoly (ns, id, rs) -> tr_poly ns id (f rs)
+let rec map_reason f = function
+  | TVar (({ contents = Unbound (name, lvl, u_tr) } as tvr), _) as t ->
+      tvr := Unbound (name, lvl, f u_tr);
+      t
+  | TVar (({ contents = Link (l_t, l_tr) } as tvr), _) as t ->
+      tvr := Link (map_reason f l_t, l_tr);
+      t
+  | TArrow (t1, t2, l, tr) -> TArrow (t1, t2, l, f tr)
+  | TGround (t, tr) -> TGround (t, f tr)
+  | TPoly (name, ts, lvls, tr) -> TPoly (name, ts, lvls, f tr)
+  | TTuple (ts, lvls, tr) -> TTuple (ts, lvls, f tr)
 
-let concat_reason n rs = map_reason n (fun rs' -> rs' @ rs)
-let new_reason n rs = map_reason n (fun _ -> rs)
-let unreason n = map_reason n (fun _ -> [])
+let rec map_reasons f = function
+  | TVar ({ contents = Unbound (name, lvl, u_tr) }, v_tr) ->
+      tvar_unbound (unbound name lvl (f u_tr)) (f v_tr)
+  | TVar ({ contents = Link (l_t, l_tr) }, v_tr) ->
+      tvar_link (link (map_reasons f l_t) (f l_tr)) (f v_tr)
+  | TArrow (t1, t2, l, tr) ->
+      TArrow (map_reasons f t1, map_reasons f t2, l, f tr)
+  | TGround (t, tr) -> TGround (t, f tr)
+  | TPoly (name, ts, lvls, tr) ->
+      TPoly (name, List.map (map_reasons f) ts, lvls, f tr)
+  | TTuple (ts, lvls, tr) -> TTuple (List.map (map_reasons f) ts, lvls, f tr)
 
-type error =
-  [ `UnifyFail of tr_node * tr_node
-  | `NotImplemented
-  | `OccursFail
-  | `MissingFunction of id
-  | `IntervalFail
-  | `UnexpectedType of tr_node * tr_node
-  | `PlaceHolder of string ]
+let clear_reasons = map_reasons (fun _ -> [])
+let concat_reasons t tr = map_reason (fun tr' -> tr' @ tr) t
+let add_reason t r = map_reason (fun ts -> r :: ts) t
 
-let pp_loc_res fmt (r, loc) =
-  let open Format in
-  let fmt_position with_name l =
-    let fname = if with_name then l.pos_fname else "" in
-    if l.pos_lnum = -1 then sprintf "%s[%d]" fname l.pos_cnum
-    else
-      sprintf "%s[%d,%d+%d]" fname l.pos_lnum l.pos_bol (l.pos_cnum - l.pos_bol)
-  in
-  let show_loc loc =
-    if not !Clflags.locations then ""
-    else
-      let ghost = if loc.loc_ghost then " ghost" else "" in
-      let p_2nd_name = loc.loc_start.pos_fname <> loc.loc_end.pos_fname in
-      sprintf "(%s..%s%s)"
-        (fmt_position true loc.loc_start)
-        (fmt_position p_2nd_name loc.loc_end)
-        ghost
-  in
-  let s_loc = show_loc loc in
-  match r with
-  | InitConst c ->
-      fprintf fmt "init as %s literal at %s" (show_ground_type c) s_loc
-  | InitVar n ->
-      fprintf fmt "init as uncertain type %s at %s "
-        ("'" ^ Char.escaped (Char.chr (n + 97)))
-        s_loc
-  | InitTuple -> fprintf fmt "init as tuple at %s" s_loc
-  | NlFunction -> fprintf fmt "rezult of nameless function at %s" s_loc
-  | RezultOf -> fprintf fmt "rezult of function that at %s" s_loc
-  | ArgumentOf n -> fprintf fmt "%d argument of function that at %s" n s_loc
-  | PatConst c ->
-      fprintf fmt "defined as %s literal in pattern matching at %s"
-        (show_ground_type c) s_loc
-  | PatInterval c ->
-      fprintf fmt "defined as %s literal in interval pattern matching at %s"
-        (show_ground_type c) s_loc
-  | PatTuple -> fprintf fmt "defined as tuple in pettern mathing at %s" s_loc
-  | RecFunction -> fprintf fmt "defined as recursive function at %s" s_loc
-  | NoReason -> fprintf fmt "no reason at %s" s_loc
+let take_reasons = function
+  | TVar (_, tr) -> tr
+  | TArrow (_, _, _, tr) -> tr
+  | TGround (_, tr) -> tr
+  | TPoly (_, _, _, tr) -> tr
+  | TTuple (_, _, tr) -> tr
 
-let pp_reasons fmt rs =
-  let open Format in
-  (pp_print_list
-     ~pp_sep:(fun _ _ -> fprintf fmt " => ")
-     (fun fmt loc_r -> pp_loc_res fmt loc_r))
-    fmt rs
+let new_reasons t rs = map_reason (fun _ -> rs) t
 
-let rec pp_tr_node fmt =
-  let open Format in
-  function
-  | TRVar (n, rs) ->
-      fprintf fmt "%s: %a\n"
-        ("'" ^ Char.escaped (Char.chr (n + 97)))
-        pp_reasons rs
-  | TRGround (gr, rs) ->
-      fprintf fmt "%s: %a\n" (show_ground_type gr) pp_reasons rs
-  | TRArr (n1, n2, rs) ->
-      fprintf fmt "trarr where\n\t%a\n\t%a\ncause %a" pp_tr_node n1 pp_tr_node
-        n2 pp_reasons rs
-  | TRTuple (ts, rs) ->
-      fprintf fmt "trtuple where %a\ncause %a\n"
-        (pp_print_list
-           ~pp_sep:(fun _ _ -> fprintf fmt "\n\t")
-           (fun fmt n -> pp_tr_node fmt n))
-        ts pp_reasons rs
-  | TRPoly (ns, id, rs) ->
-      fprintf fmt "trpoly %s where %a\ncause %a\n" id
-        (pp_print_list
-           ~pp_sep:(fun _ _ -> fprintf fmt "\n\t")
-           (fun fmt n -> pp_tr_node fmt n))
-        ns pp_reasons rs
+module Res : sig
+  type err
+  type 'a t = ('a, err) Result.t
 
-let pp_error fmt =
-  let open Format in
-  function
-  | `UnifyFail (l, r) ->
-      fprintf fmt "Can't unify these types\n";
-      pp_tr_node fmt l;
-      pp_tr_node fmt r
-  | `NotImplemented -> fprintf fmt "Not implemeted part"
-  | `OccursFail -> fprintf fmt "Occurs fail"
-  | `MissingFunction id -> fprintf fmt "Can't find function %s" id
-  | `IntervalFail ->
-      fprintf fmt
-        "There are not same type concstans in interval pattern matching"
-  | `UnexpectedType (e, g) ->
-      fprintf fmt "Expected type\n";
-      pp_tr_node fmt e;
-      fprintf fmt "but getted\n";
-      pp_tr_node fmt g
-  | `PlaceHolder e -> fprintf fmt "Place holder %s" e
-
-module R : sig
-  type 'a t
-
-  val bind : 'a t -> f:('a -> 'b t) -> 'b t
   val return : 'a -> 'a t
-  val fail : error -> 'a t
+  val error : err -> 'a t
   val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
-  val ( >>| ) : 'a t -> ('a -> 'b) -> 'b t
   val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
-  val fresh : int t
-  val run : 'a t -> ('a, error) Result.t
+  val ( *> ) : 'a t -> 'b t -> 'b t
+  val ( >>| ) : 'a t -> ('a -> 'b) -> 'b t
+  val occurs_fail : 'a t
+  val miss_invar : 'a t
+  val unify_fail : typ -> typ -> 'a t
+  val interval_pat_fail : 'a t
+  val not_impl_pat : 'a t
+  val no_fun : name -> 'a t
+  val rec_no_impl : 'a t
+  val no_impl_expr : 'a t
+  val not_impl_h_lvl : 'a t
+  val exp_let : 'a t
 end = struct
-  type 'a t = int -> int * ('a, error) Result.t
+  type err =
+    | OccursFail
+    | MissingInvariant
+    | UnifyFail of typ * typ
+    | IntervalPatternFail
+    | NotImplementedPattern
+    | NoSuchFunction of name
+    | RecNotImplementedPart
+    | NotImplementedExpression
+    | NotImplementedHightLvl
+    | ExpectedLet
 
-  let ( >>= ) : 'a 'b. 'a t -> ('a -> 'b t) -> 'b t =
-   fun monad f state ->
-    let last, result = monad state in
-    match result with Error e -> (last, Error e) | Ok value -> f value last
+  type 'a t = ('a, err) Result.t
 
-  let fail error state = (state, Base.Result.fail error)
-  let return value last = (last, Base.Result.return value)
-  let bind x ~f = x >>= f
+  let return : 'a -> 'a t = fun x -> Ok x
+  let error : err -> 'a t = fun msg -> Error msg
+  let ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t = Result.bind
+  let ( let* ) = ( >>= )
 
-  let ( >>| ) : 'a 'b. 'a t -> ('a -> 'b) -> 'b t =
-   fun x f state ->
-    match x state with
-    | state, Ok x -> (state, Ok (f x))
-    | state, Error e -> (state, Error e)
+  let ( *> ) : 'a t -> 'b t -> 'b t =
+   fun x y -> match x with Ok _ -> y | Error msg -> error msg
 
-  let ( let* ) x f = bind x ~f
-  let fresh : int t = fun last -> (last + 1, Result.Ok last)
-  let run monad = snd (monad 0)
+  let ( >>| ) : 'a t -> ('a -> 'b) -> 'b t =
+   fun x f -> match x with Ok x -> Ok (f x) | Error msg -> error msg
+
+  let occurs_fail = error OccursFail
+  let miss_invar = error MissingInvariant
+  let unify_fail t1 t2 = error @@ UnifyFail (t1, t2)
+  let interval_pat_fail = error @@ IntervalPatternFail
+  let not_impl_pat = error @@ NotImplementedPattern
+  let no_fun f = error @@ NoSuchFunction f
+  let rec_no_impl = error @@ RecNotImplementedPart
+  let no_impl_expr = error @@ NotImplementedExpression
+  let not_impl_h_lvl = error @@ NotImplementedHightLvl
+  let exp_let = error @@ ExpectedLet
 end
