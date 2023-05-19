@@ -12,5 +12,5 @@
  (public_name main)
  (preprocess
   (pps ppx_expect ppx_deriving.show))
- (modules test main infertypes)
+ (modules test main infertypes infer)
  (libraries stdio ocaml-compiler-libs.common))
