@@ -41,6 +41,7 @@ and reason =
   | ArgOf of int * loc
   | ApplyAs of int * typ * loc
   | RecDef of loc
+  | ResOfConstr of name
 
 and reasons = reason list [@@deriving show { with_path = false }]
 
@@ -69,6 +70,7 @@ let res_of_pm loc = reasons @@ ResOfPatMatch loc
 let arg_of n loc = reasons @@ ArgOf (n, loc)
 let rec_dec loc = reasons @@ RecDef loc
 let res_of_apply f args loc = reasons @@ ResultOfApply (f, args, loc)
+let res_of_const name = reasons @@ ResOfConstr name
 
 let rec map_reason f = function
   | TVar (({ contents = Unbound (name, lvl, u_tr) } as tvr), _) as t ->
@@ -107,8 +109,20 @@ let take_reasons = function
 
 let new_reasons t rs = map_reason (fun _ -> rs) t
 
+type err =
+  | OccursFail
+  | MissingInvariant
+  | UnifyFail of typ * typ
+  | IntervalPatternFail
+  | NotImplementedPattern
+  | NoSuchFunction of name
+  | RecNotImplementedPart
+  | NotImplementedExpression
+  | NotImplementedHightLvl
+  | ExpectedLet
+[@@deriving show { with_path = false }]
+
 module Res : sig
-  type err
   type 'a t = ('a, err) Result.t
 
   val return : 'a -> 'a t
@@ -128,18 +142,6 @@ module Res : sig
   val not_impl_h_lvl : 'a t
   val exp_let : 'a t
 end = struct
-  type err =
-    | OccursFail
-    | MissingInvariant
-    | UnifyFail of typ * typ
-    | IntervalPatternFail
-    | NotImplementedPattern
-    | NoSuchFunction of name
-    | RecNotImplementedPart
-    | NotImplementedExpression
-    | NotImplementedHightLvl
-    | ExpectedLet
-
   type 'a t = ('a, err) Result.t
 
   let return : 'a -> 'a t = fun x -> Ok x
