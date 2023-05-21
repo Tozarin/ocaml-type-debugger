@@ -57,6 +57,12 @@ let code8 = {|
   z
 |}
 
+let code9 = {|
+  let x (Int y) = y;;
+
+  (+) (x (Int 1)) 1
+|}
+
 let list =
   let x = tvar_unbound (unbound "x" !curr_lvl []) [] in
   new_arrow x (new_arrow x (new_poly "list" [ x ] []) []) []
@@ -66,7 +72,8 @@ let plus =
     (new_arrow (tgronud int_t []) (tgronud int_t []) [])
     []
 
-let env' = [ ("ll", list); ("+", plus) ]
+let const = new_arrow (tgronud int_t []) (new_poly "INT" [] []) []
+let env' = [ ("ll", list); ("+", plus); ("Int", const) ]
 
 let top_infer env expr =
   reset_typ_vars ();
@@ -76,7 +83,7 @@ let top_infer env expr =
   | Pstr_value _ as v -> let_value env expr.pstr_loc v
   | _ -> not_impl_h_lvl
 
-let codes = Parse.implementation (Lexing.from_string code2)
+let codes = Parse.implementation (Lexing.from_string code9)
 
 let ts env =
   List.fold_left
@@ -89,4 +96,6 @@ let ts = ts env'
 
 let () =
   let open Format in
-  match ts with Ok _ -> printf "Ok" | Error _ -> printf "err"
+  match ts with
+  | Ok _ -> printf "types are correct"
+  | Error err -> pp_err std_formatter err

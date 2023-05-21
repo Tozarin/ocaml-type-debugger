@@ -276,31 +276,43 @@ let gen_fun n loc =
   in
   helper n
 
-let rec ppat env p =
+let rec ppat env p t =
   let loc = p.ppat_loc in
-  match p.ppat_desc with
-  | Ppat_any -> return (newvar () (pat_any loc), env)
-  | Ppat_var var ->
-      let t = newvar () (pat_any loc) in
+  match (p.ppat_desc, t) with
+  | Ppat_any, t -> return (new_reasons t (pat_any loc), env)
+  | Ppat_var var, t ->
+      let t = new_reasons t (pat_any loc) in
       return (t, (var.txt, t) :: env)
-  | Ppat_constant c ->
+  | Ppat_constant c, _ ->
       let c = match_const c in
       return (tgronud c (pat_const c loc), env)
-  | Ppat_interval (c1, c2) ->
+  | Ppat_interval (c1, c2), _ ->
       let c = match_const c1 in
       if eq_const c1 c2 then return (tgronud c (pat_interval_const c loc), env)
       else interval_pat_fail
-  | Ppat_tuple ps ->
+  | Ppat_tuple ps, TTuple (ts, _, _) ->
       let* ts, env =
-        List.fold_right
-          (fun p acc ->
+        List.fold_right2
+          (fun p t acc ->
             let* acc, env = acc in
-            let* t, env = ppat env p in
+            let* t, env = ppat env p t in
             return (t :: acc, env))
-          ps
+          ps ts
           (return ([], env))
       in
       return (new_tuple ts (pat_tuple loc), env)
+  | Ppat_construct (id, ps), _ -> (
+      let id = String.concat "." (Longident.flatten id.txt) in
+      let* t =
+        try return @@ inst (List.assoc id env) with Not_found -> no_constr id
+      in
+      match (t, ps) with
+      | (TPoly _ as t), None -> return (new_reasons t (pat_constr id loc), env)
+      | TArrow (t, res, _, _), Some ps ->
+          let _, p = ps in
+          let* _, env = ppat env p t in
+          return (new_reasons res (pat_constr id loc), env)
+      | _ -> constr_sig)
   | _ -> not_impl_pat
 
 let tof =
@@ -329,7 +341,7 @@ let tof =
         in
         return @@ new_tuple ts (init_tuple loc)
     | Pexp_fun (_, _, arg, body) ->
-        let* t_arg, env = ppat env arg in
+        let* t_arg, env = ppat env arg (newvar () []) in
         let* t_body = helper env body in
         return @@ new_arrow t_arg t_body (nl_fun loc)
     | Pexp_apply (expr, args) ->
@@ -357,11 +369,12 @@ let tof =
               let e = v.pvb_expr in
               let rec_t = gen_fun (count_of_args e.pexp_desc) loc in
               let* env in
-              let* env =
-                match p.ppat_desc with
-                | Ppat_any -> return env
-                | Ppat_var id -> return ((id.txt, rec_t) :: env)
-                | _ -> rec_no_impl
+              let* _, env =
+                ppat env p rec_t
+                (* match p.ppat_desc with
+                   | Ppat_any -> return env
+                   | Ppat_var id -> return ((id.txt, rec_t) :: env)
+                   | _ -> rec_no_impl *)
               in
               let* t_e = helper env e in
               unify t_e rec_t *> return (leave_lvl ()) *> gen t_e *> return env)
@@ -377,7 +390,7 @@ let tof =
               let p = v.pvb_pat in
               let* env in
               let* t_e = helper env e in
-              let* arg, env = ppat env p in
+              let* arg, env = ppat env p (newvar () []) in
               unify t_e arg *> return (leave_lvl ()) *> gen t_e *> return env)
             (return env) v_bs
         in
@@ -387,7 +400,7 @@ let tof =
         List.fold_left
           (fun acc case ->
             let* acc in
-            let* p_t, env = ppat env case.pc_lhs in
+            let* p_t, env = ppat env case.pc_lhs (newvar () []) in
             unify e_match p_t
             *> let* case_e = helper env case.pc_rhs in
                unify (inst acc) case_e *> return acc
@@ -399,14 +412,15 @@ let tof =
     | Pexp_construct (id, es) -> (
         let id = String.concat "." (Longident.flatten id.txt) in
         let* t =
-          try return @@ inst (List.assoc id env) with Not_found -> no_fun id
+          try return @@ inst (List.assoc id env)
+          with Not_found -> no_constr id
         in
         match (t, es) with
         | (TPoly _ as t), None -> return (add_reason t (ResOfConstr (id, loc)))
         | TArrow (t, (TPoly _ as res), _, _), Some arg ->
             let* arg = helper env arg in
             unify t arg *> return (add_reason res (ResOfConstr (id, loc)))
-        | _ -> no_impl_expr)
+        | _ -> constr_sig)
     | _ -> no_impl_expr
   in
   helper
@@ -437,7 +451,7 @@ let let_value env loc = function
           let p = v.pvb_pat in
           let* env in
           let* t_e = tof env e in
-          let* arg, env = ppat env p in
+          let* arg, env = ppat env p (newvar () []) in
           unify t_e arg *> return (leave_lvl ()) *> gen t_e *> return env)
         (return env) v_bs
   | _ -> exp_let
