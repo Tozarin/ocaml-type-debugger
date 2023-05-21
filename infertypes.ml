@@ -41,7 +41,7 @@ and reason =
   | ArgOf of int * loc
   | ApplyAs of int * typ * loc
   | RecDef of loc
-  | ResOfConstr of name
+  | ResOfConstr of name * loc
 
 and reasons = reason list [@@deriving show { with_path = false }]
 
@@ -70,7 +70,7 @@ let res_of_pm loc = reasons @@ ResOfPatMatch loc
 let arg_of n loc = reasons @@ ArgOf (n, loc)
 let rec_dec loc = reasons @@ RecDef loc
 let res_of_apply f args loc = reasons @@ ResultOfApply (f, args, loc)
-let res_of_const name = reasons @@ ResOfConstr name
+let res_of_const name loc = reasons @@ ResOfConstr (name, loc)
 
 let rec map_reason f = function
   | TVar (({ contents = Unbound (name, lvl, u_tr) } as tvr), _) as t ->
@@ -120,6 +120,7 @@ type err =
   | NotImplementedExpression
   | NotImplementedHightLvl
   | ExpectedLet
+  | UnexpectedConstructSig
 [@@deriving show { with_path = false }]
 
 module Res : sig
@@ -141,6 +142,7 @@ module Res : sig
   val no_impl_expr : 'a t
   val not_impl_h_lvl : 'a t
   val exp_let : 'a t
+  val constr_sig : 'a t
 end = struct
   type 'a t = ('a, err) Result.t
 
@@ -165,4 +167,5 @@ end = struct
   let no_impl_expr = error @@ NotImplementedExpression
   let not_impl_h_lvl = error @@ NotImplementedHightLvl
   let exp_let = error @@ ExpectedLet
+  let constr_sig = error @@ UnexpectedConstructSig
 end

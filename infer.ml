@@ -247,23 +247,20 @@ let match_const = function
 
 let eq_const c1 c2 = match_const c1 = match_const c2
 
-let add_arg_reason t loc =
-  let rec helper acc = function
-    | TArrow (t1, t2, _, _) (* ls, rs ??? *) ->
-        let t2, n = helper (acc + 1) t2 in
-        let t1 = add_reason t1 (ArgOf (n - 1, loc)) in
-        let t2 =
-          match t2 with
-          | [] -> failwith ""
-          | t2 :: tl when n != acc + 1 -> add_reason t2 (ArgOf (n, loc)) :: tl
-          | t2 -> t2
-        in
-        (t1 :: t2, n - 2)
-    | t ->
-        if acc = 1 then ([ t ], 1)
-        else ([ add_reason t (ResultOfWithoutName loc) ], acc)
+let arg_res_fun f loc =
+  let apply_as n f loc = ApplyAs (n, clear_reasons f, loc) in
+  let rec helper n = function
+    | TArrow (l, (TArrow _ as r), lvl, tr) ->
+        let l = add_reason l (apply_as n f loc) in
+        let n, r = helper (n + 1) r in
+        (n, tarrow l r lvl tr)
+    | TArrow (l, r, lvl, tr) ->
+        let l = add_reason l (apply_as n f loc) in
+        let r = add_reason r (apply_as (n + 1) f loc) in
+        (n + 2, tarrow l r lvl tr)
+    | t -> (n, t)
   in
-  fst @@ helper 1 t
+  snd @@ helper 1 f
 
 let count_of_args e =
   let rec helper n = function
@@ -337,15 +334,14 @@ let tof =
         return @@ new_arrow t_arg t_body (nl_fun loc)
     | Pexp_apply (expr, args) ->
         let* t_fun = helper env expr in
-        let* _, t_args =
+        let t_fun = arg_res_fun t_fun loc in
+        let* t_args =
           List.fold_right
             (fun (_, e) acc ->
-              let* i, acc = acc in
+              let* acc in
               let* e = helper env e in
-              let arg = add_reason e (ApplyAs (i, clear_reasons t_fun, loc)) in
-              return (i + 1, arg :: acc))
-            args
-            (return (1, []))
+              return (e :: acc))
+            args (return [])
         in
         let t_res = newvar () (res_of_apply t_fun t_args loc) in
         let t_args =
@@ -400,6 +396,17 @@ let tof =
                | Some e -> (match helper env e with _ -> ())); *))
           (return (newvar () (res_of_pm loc)))
           cs
+    | Pexp_construct (id, es) -> (
+        let id = String.concat "." (Longident.flatten id.txt) in
+        let* t =
+          try return @@ inst (List.assoc id env) with Not_found -> no_fun id
+        in
+        match (t, es) with
+        | (TPoly _ as t), None -> return (add_reason t (ResOfConstr (id, loc)))
+        | TArrow (t, (TPoly _ as res), _, _), Some arg ->
+            let* arg = helper env arg in
+            unify t arg *> return (add_reason res (ResOfConstr (id, loc)))
+        | _ -> no_impl_expr)
     | _ -> no_impl_expr
   in
   helper
