@@ -281,7 +281,7 @@ let rec ppat env p t =
   match (p.ppat_desc, t) with
   | Ppat_any, t -> return (new_reasons t (pat_any loc), env)
   | Ppat_var var, t ->
-      let t = new_reasons t (pat_any loc) in
+      let t = add_reason t (PatAnyVar loc) in
       return (t, (var.txt, t) :: env)
   | Ppat_constant c, _ ->
       let c = match_const c in
@@ -290,7 +290,7 @@ let rec ppat env p t =
       let c = match_const c1 in
       if eq_const c1 c2 then return (tgronud c (pat_interval_const c loc), env)
       else interval_pat_fail
-  | Ppat_tuple ps, TTuple (ts, _, _) ->
+  | Ppat_tuple ps, TTuple (ts, _, rs) ->
       let* ts, env =
         List.fold_right2
           (fun p t acc ->
@@ -300,7 +300,11 @@ let rec ppat env p t =
           ps ts
           (return ([], env))
       in
-      return (new_tuple ts (pat_tuple loc), env)
+      return (new_tuple ts (pat_tuple loc @ rs), env)
+  | Ppat_tuple ps, _ ->
+      let ts = List.map (fun _ -> newvar () []) ps in
+      let t = new_tuple ts [] in
+      ppat env p t
   | Ppat_construct (id, ps), _ -> (
       let id = String.concat "." (Longident.flatten id.txt) in
       let* t =
@@ -355,7 +359,7 @@ let tof =
               return (e :: acc))
             args (return [])
         in
-        let t_res = newvar () (res_of_apply t_fun t_args loc) in
+        let t_res = newvar () (res_of_nameless loc) in
         let t_args =
           List.fold_right (fun e acc -> new_arrow e acc no_reason) t_args t_res
         in
@@ -390,7 +394,7 @@ let tof =
               let p = v.pvb_pat in
               let* env in
               let* t_e = helper env e in
-              let* arg, env = ppat env p (newvar () []) in
+              let* arg, env = ppat env p t_e in
               unify t_e arg *> return (leave_lvl ()) *> gen t_e *> return env)
             (return env) v_bs
         in

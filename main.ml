@@ -3,14 +3,14 @@ open Infertypes
 open Parsetree
 open Res
 
-let code =
+let code1 =
   {|
   let foo x = 
     match x with 
       | 1 -> x 
       | _ -> 1
     in 
-  foo
+  foo "str"
   |}
 
 let code2 = {|
@@ -18,23 +18,23 @@ let code2 = {|
   |}
 
 let code3 = {|
-    let (a, b) = 
-      a + b 
+    let foo (a, b) = 
+      b + a 
     in
-    a
+    foo
   |}
 
 let code4 = {| 
 let foo (a, b) = 
   a + b 
 in
-  foo (1, 2)|}
+  foo ("123", 2)|}
 
 let code5 = {| 
     let (a, b) = 
       ("123", 1) 
     in 
-    b|}
+    a + 1|}
 
 let code6 =
   {|
@@ -43,7 +43,7 @@ let code6 =
     | 1 -> 1
     | y -> foo y 
   in
-  foo|}
+  foo "123"|}
 
 let code7 = {|let foo x = 1 in foo 1|}
 
@@ -83,7 +83,7 @@ let top_infer env expr =
   | Pstr_value _ as v -> let_value env expr.pstr_loc v
   | _ -> not_impl_h_lvl
 
-let codes = Parse.implementation (Lexing.from_string code9)
+let codes = Parse.implementation (Lexing.from_string code1)
 
 let ts env =
   List.fold_left

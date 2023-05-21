@@ -29,7 +29,7 @@ and reason =
   | NoReason
   | ResultOf of name * loc
   | ResultOfWithoutName of loc
-  | ResultOfApply of typ * typ list * loc
+  | ResultOfApply of typ * loc
   | LetExpr of name * loc
   | NamelessFunction of loc
   | InitTuple of loc
@@ -70,7 +70,7 @@ let pat_tuple loc = reasons @@ PatTuple loc
 let res_of_pm loc = reasons @@ ResOfPatMatch loc
 let arg_of n loc = reasons @@ ArgOf (n, loc)
 let rec_dec loc = reasons @@ RecDef loc
-let res_of_apply f args loc = reasons @@ ResultOfApply (f, args, loc)
+let res_of_apply f loc = reasons @@ ResultOfApply (f, loc)
 let res_of_const name loc = reasons @@ ResOfConstr (name, loc)
 let pat_constr name loc = reasons @@ PatConstr (name, loc)
 
