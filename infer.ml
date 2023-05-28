@@ -459,3 +459,47 @@ let let_value env loc = function
           unify t_e arg *> return (leave_lvl ()) *> gen t_e *> return env)
         (return env) v_bs
   | _ -> exp_let
+
+let top_infer env expr =
+  reset_typ_vars ();
+  reset_lvls_to_update ();
+  match expr.pstr_desc with
+  | Pstr_eval (expr, _) -> (tof env expr >>| cyc_free) *> return env
+  | Pstr_value _ as v -> let_value env expr.pstr_loc v
+  | _ -> not_impl_h_lvl
+
+let rec from_core = function
+  | Ptyp_any -> return @@ newvar () []
+  | Ptyp_var name -> return @@ tvar_unbound (unbound name 0 []) []
+  | Ptyp_arrow (_, { ptyp_desc = l; _ }, { ptyp_desc = r; _ }) ->
+      let* l = from_core l in
+      let* r = from_core r in
+      return @@ new_arrow l r []
+  | Ptyp_tuple ls ->
+      let* ts =
+        List.fold_right
+          (fun { ptyp_desc = t; _ } acc ->
+            let* acc in
+            let* t = from_core t in
+            return @@ (t :: acc))
+          ls (return [])
+      in
+      return @@ new_tuple ts []
+  | Ptyp_constr (id, cs) -> (
+      match (String.concat "." (Longident.flatten id.txt), cs) with
+      | "int", [] -> return @@ tgronud int_t []
+      | "string", [] -> return @@ tgronud string_t []
+      | "float", [] -> return @@ tgronud float_t []
+      | "char", [] -> return @@ tgronud char_t []
+      | "bool", [] -> return @@ tgronud bool_t []
+      | name, cs ->
+          let* ts =
+            List.fold_right
+              (fun { ptyp_desc = t; _ } acc ->
+                let* acc in
+                let* t = from_core t in
+                return @@ (t :: acc))
+              cs (return [])
+          in
+          return @@ new_poly name ts [])
+  | _ -> unsup_core

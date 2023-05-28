@@ -1,4 +1,5 @@
 open Warnings
+open Parsetree
 
 type name = string
 and lvl = int
@@ -124,6 +125,8 @@ type err =
   | ExpectedLet
   | UnexpectedConstructSig
   | NoSuchConstr of name
+  | UnsupportedCoreType
+  | NotImplementedType
 [@@deriving show { with_path = false }]
 
 module Res : sig
@@ -147,6 +150,8 @@ module Res : sig
   val exp_let : 'a t
   val constr_sig : 'a t
   val no_constr : name -> 'a t
+  val unsup_core : 'a t
+  val not_impl_t_d : 'a t
 end = struct
   type 'a t = ('a, err) Result.t
 
@@ -173,4 +178,6 @@ end = struct
   let exp_let = error @@ ExpectedLet
   let constr_sig = error @@ UnexpectedConstructSig
   let no_constr constr = error @@ NoSuchConstr constr
+  let unsup_core = error @@ UnsupportedCoreType
+  let not_impl_t_d = error @@ NotImplementedType
 end
