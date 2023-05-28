@@ -1,5 +1,3 @@
 val ( - ) : int -> int -> int;;
 
-type opt =
-  | Some of int
-  | None
+val ( + ) : int -> int -> int;;

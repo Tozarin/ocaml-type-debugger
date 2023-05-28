@@ -1,0 +1,8 @@
+(executable
+ (name test)
+ (modules test)
+ (public_name test)
+ (libraries otd stdio))
+
+(cram
+ (deps ./test.exe pre_inited test1 test2 test3 test4))

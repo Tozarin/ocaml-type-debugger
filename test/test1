@@ -1,0 +1,6 @@
+let foo x = 
+    match x with 
+    | 1 -> x
+    | _ -> 1
+in
+foo "string"

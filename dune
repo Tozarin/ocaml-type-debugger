@@ -8,9 +8,6 @@
 
 (executable
  (name main)
- (package otp)
  (public_name main)
- (preprocess
-  (pps ppx_expect ppx_deriving.show))
- (modules main preinit infertypes infer)
- (libraries stdio ocaml-compiler-libs.common))
+ (modules main)
+ (libraries otd stdio))

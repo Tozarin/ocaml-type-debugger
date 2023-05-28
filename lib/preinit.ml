@@ -62,8 +62,8 @@ let add_from_sig env { psig_desc = s; _ } =
         (return env) ts
   | _ -> not_impl_t_d
 
-let get_env =
-  let file = In_channel.with_open_bin "pre_inited" In_channel.input_all in
+let get_env file =
+  let file = In_channel.with_open_bin file In_channel.input_all in
   let ss = Parse.interface (Lexing.from_string file) in
   List.fold_left
     (fun acc s ->

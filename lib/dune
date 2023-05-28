@@ -1,0 +1,9 @@
+(library
+ (name otd)
+ (modules preinit infertypes infer)
+ (libraries stdio ocaml-compiler-libs.common)
+ (instrumentation
+  (backend bisect_ppx))
+ (preprocess
+  (pps ppx_expect ppx_deriving.show))
+ (inline_tests))
