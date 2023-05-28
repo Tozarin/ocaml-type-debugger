@@ -124,7 +124,7 @@ let force_lvls_update () =
         ls.new_lvl <- lvl;
         ls.old_lvl <- lvl;
         acc
-    | _ -> assert false
+    | _ -> ph
   in
   let* ls_to_update = List.fold_left update_one (return []) !lvls_to_update in
   return (lvls_to_update := ls_to_update)

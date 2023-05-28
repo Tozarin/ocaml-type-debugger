@@ -3,12 +3,11 @@
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
 open Warnings
-open Parsetree
 
-type name = string
-and lvl = int
+type name = string [@@deriving show { with_path = false }]
+type lvl = int [@@deriving show { with_path = false }]
 
-and ground_typ = Int | String | Char | Bool | Float
+type ground_typ = Int | String | Char | Bool | Float
 [@@deriving show { with_path = false }]
 
 let int_t = Int
@@ -18,6 +17,8 @@ let bool_t = Bool
 let float_t = Float
 let pp_loc = Location.print_loc
 
+type lvls = { mutable old_lvl : lvl; mutable new_lvl : lvl } [@@deriving show { with_path = false }]
+
 type typ =
   | TVar of tv ref * reasons
   | TArrow of typ * typ * lvls * reasons
@@ -26,7 +27,6 @@ type typ =
   | TTuple of typ list * lvls * reasons
 
 and tv = Unbound of name * lvl * reasons | Link of typ * reasons
-and lvls = { mutable old_lvl : lvl; mutable new_lvl : lvl }
 
 and reason =
   | InitConst of ground_typ * loc
@@ -117,6 +117,7 @@ let take_reasons = function
 let new_reasons t rs = map_reason (fun _ -> rs) t
 
 type err =
+  | PlaceHolder
   | OccursFail
   | MissingInvariant
   | UnifyFail of typ * typ
@@ -156,6 +157,7 @@ module Res : sig
   val no_constr : name -> 'a t
   val unsup_core : 'a t
   val not_impl_t_d : 'a t
+  val ph : 'a t
 end = struct
   type 'a t = ('a, err) Result.t
 
@@ -184,4 +186,5 @@ end = struct
   let no_constr constr = error @@ NoSuchConstr constr
   let unsup_core = error @@ UnsupportedCoreType
   let not_impl_t_d = error @@ NotImplementedType
+  let ph = error @@ PlaceHolder
 end
