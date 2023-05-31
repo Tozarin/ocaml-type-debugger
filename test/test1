@@ -1,6 +1,13 @@
-let foo x = 
-    match x with 
-    | 1 -> x
-    | _ -> 1
-in
-foo "string"
+let foo (a, b) = a + b;;
+
+let bar a b = a + b;;
+
+let a = 1;;
+
+let b = 2;;
+
+let baz = (foo (a, b)) - (bar a b);;
+
+let foo = (fst (a, b)) + (snd (b, a));;
+
+let foo = (a, b) ++ (a, b);;

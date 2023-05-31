@@ -104,7 +104,7 @@ let force_lvls_update () =
   and update_one acc = function
     | (TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _)) as ty
       when ls.old_lvl <= !curr_lvl ->
-        let* acc in
+        let* acc = acc in
         return (ty :: acc)
     | (TArrow (_, _, ls, _) | TPoly (_, _, ls, _) | TTuple (_, ls, _))
       when ls.old_lvl = ls.new_lvl ->
@@ -342,7 +342,7 @@ let tof =
         let* ts =
           List.fold_right
             (fun e acc ->
-              let* acc in
+              let* acc = acc in
               let* e = helper env e in
               return (e :: acc))
             es (return [])
@@ -358,7 +358,7 @@ let tof =
         let* t_args =
           List.fold_right
             (fun (_, e) acc ->
-              let* acc in
+              let* acc = acc in
               let* e = helper env e in
               return (e :: acc))
             args (return [])
@@ -376,7 +376,7 @@ let tof =
               let p = v.pvb_pat in
               let e = v.pvb_expr in
               let rec_t = gen_fun (count_of_args e.pexp_desc) loc in
-              let* env in
+              let* env = env in
               let* _, env =
                 ppat env p rec_t
                 (* match p.ppat_desc with
@@ -396,7 +396,7 @@ let tof =
               enter_lvl ();
               let e = v.pvb_expr in
               let p = v.pvb_pat in
-              let* env in
+              let* env = env in
               let* t_e = helper env e in
               let* arg, env = ppat env p t_e in
               unify t_e arg *> return (leave_lvl ()) *> gen t_e *> return env)
@@ -407,7 +407,7 @@ let tof =
         let* e_match = helper env expr in
         List.fold_left
           (fun acc case ->
-            let* acc in
+            let* acc = acc in
             let* p_t, env = ppat env case.pc_lhs (newvar () []) in
             unify e_match p_t
             *> let* case_e = helper env case.pc_rhs in
@@ -441,7 +441,7 @@ let let_value env loc = function
           let p = v.pvb_pat in
           let e = v.pvb_expr in
           let rec_t = gen_fun (count_of_args e.pexp_desc) loc in
-          let* env in
+          let* env = env in
           let* env =
             match p.ppat_desc with
             | Ppat_any -> return env
@@ -457,7 +457,7 @@ let let_value env loc = function
           enter_lvl ();
           let e = v.pvb_expr in
           let p = v.pvb_pat in
-          let* env in
+          let* env = env in
           let* t_e = tof env e in
           let* arg, env = ppat env p (newvar () []) in
           unify t_e arg *> return (leave_lvl ()) *> gen t_e *> return env)
@@ -483,7 +483,7 @@ let rec from_core = function
       let* ts =
         List.fold_right
           (fun { ptyp_desc = t; _ } acc ->
-            let* acc in
+            let* acc = acc in
             let* t = from_core t in
             return @@ (t :: acc))
           ls (return [])
@@ -500,7 +500,7 @@ let rec from_core = function
           let* ts =
             List.fold_right
               (fun { ptyp_desc = t; _ } acc ->
-                let* acc in
+                let* acc = acc in
                 let* t = from_core t in
                 return @@ (t :: acc))
               cs (return [])

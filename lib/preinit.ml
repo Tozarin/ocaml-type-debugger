@@ -34,12 +34,12 @@ let add_from_sig env { psig_desc = s; _ } =
       in
       List.fold_left
         (fun acc t ->
-          let* acc in
+          let* acc = acc in
           let* name, ds = t in
           let rez_t = new_poly name [] [] in
           List.fold_left
             (fun env cd ->
-              let* env in
+              let* env = env in
               let* name, cs = m_cd cd in
               let* constr =
                 match cs with
@@ -50,7 +50,7 @@ let add_from_sig env { psig_desc = s; _ } =
                     let* ts =
                       List.fold_right
                         (fun { ptyp_desc = cs; _ } acc ->
-                          let* acc in
+                          let* acc = acc in
                           let* c = from_core cs in
                           return (c :: acc))
                         cs (return [])
@@ -67,6 +67,6 @@ let get_env file =
   let ss = Parse.interface (Lexing.from_string file) in
   List.fold_left
     (fun acc s ->
-      let* acc in
+      let* acc = acc in
       add_from_sig acc s)
     (return []) ss

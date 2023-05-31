@@ -5,4 +5,4 @@
  (libraries otd stdio))
 
 (cram
- (deps ./test.exe pre_inited test1 test2 test3 test4))
+ (deps ./test.exe pre_inited test1 test2 test3))

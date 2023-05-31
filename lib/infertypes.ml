@@ -17,7 +17,8 @@ let bool_t = Bool
 let float_t = Float
 let pp_loc = Location.print_loc
 
-type lvls = { mutable old_lvl : lvl; mutable new_lvl : lvl } [@@deriving show { with_path = false }]
+type lvls = { mutable old_lvl : lvl; mutable new_lvl : lvl }
+[@@deriving show { with_path = false }]
 
 type typ =
   | TVar of tv ref * reasons
@@ -188,3 +189,170 @@ end = struct
   let not_impl_t_d = error @@ NotImplementedType
   let ph = error @@ PlaceHolder
 end
+
+(********************tests********************)
+
+(*****************ground_typ_tests************)
+let gr_test = pp_ground_typ Format.std_formatter
+
+let%expect_test _ =
+  gr_test @@ int_t;
+  [%expect {| Int |}]
+
+let%expect_test _ =
+  gr_test @@ string_t;
+  [%expect {| String |}]
+
+let%expect_test _ =
+  gr_test @@ char_t;
+  [%expect {| Char |}]
+
+let%expect_test _ =
+  gr_test @@ bool_t;
+  [%expect {| Bool |}]
+
+let%expect_test _ =
+  gr_test @@ float_t;
+  [%expect {| Float |}]
+
+(*****************tv_tests********************)
+let tv_test = pp_tv Format.std_formatter
+
+let%expect_test _ =
+  tv_test @@ unbound "name" 1 [];
+  [%expect {| (Unbound ("name", 1, [])) |}]
+
+let%expect_test _ =
+  tv_test @@ link (tgronud int_t []) [];
+  [%expect {| (Link ((TGround (Int, [])), [])) |}]
+
+(****************typ_tests********************)
+let typ_test = pp_typ Format.std_formatter
+let tt = tgronud int_t []
+let lvls = { new_lvl = 0; old_lvl = 0 }
+
+let%expect_test _ =
+  typ_test @@ tvar_unbound (unbound "name" 1 []) [];
+  [%expect {| (TVar (ref ((Unbound ("name", 1, []))), [])) |}]
+
+let%expect_test _ =
+  typ_test @@ tvar_link (link tt []) [];
+  [%expect {| (TVar (ref ((Link ((TGround (Int, [])), []))), [])) |}]
+
+let%expect_test _ =
+  typ_test @@ tarrow tt tt lvls [];
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  typ_test @@ tgronud int_t [];
+  [%expect {| (TGround (Int, [])) |}]
+
+let%expect_test _ =
+  typ_test @@ tpoly "name" [] lvls [];
+  [%expect {| (TPoly ("name", [], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  typ_test @@ ttuple [] lvls [];
+  [%expect {| (TTuple ([], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+(************reasons_tests********************)
+let res_test = pp_reasons Format.std_formatter
+
+let%expect_test _ =
+  res_test @@ reasons NoReason;
+  [%expect {| [NoReason] |}]
+
+let%expect_test _ =
+  typ_test
+  @@ map_reason (fun _ -> no_reason) (tvar_unbound (unbound "name" 1 []) []);
+  [%expect {| (TVar (ref ((Unbound ("name", 1, [NoReason]))), [])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reason (fun _ -> no_reason) (tvar_link (link tt []) []);
+  [%expect {| (TVar (ref ((Link ((TGround (Int, [NoReason])), []))), [])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reason (fun _ -> no_reason) (tarrow tt tt lvls []);
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 0; new_lvl = 0 }, [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reason (fun _ -> no_reason) tt;
+  [%expect {| (TGround (Int, [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reason (fun _ -> no_reason) (tpoly "name" [] lvls []);
+  [%expect {| (TPoly ("name", [], { old_lvl = 0; new_lvl = 0 }, [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reason (fun _ -> no_reason) (ttuple [] lvls []);
+  [%expect {| (TTuple ([], { old_lvl = 0; new_lvl = 0 }, [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test
+  @@ map_reasons (fun _ -> no_reason) (tvar_unbound (unbound "name" 1 []) []);
+  [%expect {| (TVar (ref ((Unbound ("name", 1, [NoReason]))), [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reasons (fun _ -> no_reason) (tvar_link (link tt []) []);
+  [%expect {| (TVar (ref ((Link ((TGround (Int, [NoReason])), [NoReason]))), [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reasons (fun _ -> no_reason) (tarrow tt tt lvls []);
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [NoReason])), (TGround (Int, [NoReason])),
+       { old_lvl = 0; new_lvl = 0 }, [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reasons (fun _ -> no_reason) tt;
+  [%expect {| (TGround (Int, [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reasons (fun _ -> no_reason) (tpoly "name" [] lvls []);
+  [%expect {| (TPoly ("name", [], { old_lvl = 0; new_lvl = 0 }, [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ map_reasons (fun _ -> no_reason) (ttuple [] lvls []);
+  [%expect {| (TTuple ([], { old_lvl = 0; new_lvl = 0 }, [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ clear_reasons (tgronud int_t no_reason);
+  [%expect {| (TGround (Int, [])) |}]
+
+let%expect_test _ =
+  typ_test @@ concat_reasons tt no_reason;
+  [%expect {| (TGround (Int, [NoReason])) |}]
+
+let%expect_test _ =
+  typ_test @@ add_reason tt NoReason;
+  [%expect {| (TGround (Int, [NoReason])) |}]
+
+let%expect_test _ =
+  res_test @@ take_reasons tt;
+  [%expect {| [] |}]
+
+let%expect_test _ =
+  res_test @@ take_reasons (tvar_unbound (unbound "name" 1 []) no_reason);
+  [%expect {| [NoReason] |}]
+
+let%expect_test _ =
+  res_test @@ take_reasons (tarrow tt tt lvls no_reason);
+  [%expect {| [NoReason] |}]
+
+let%expect_test _ =
+  res_test @@ take_reasons (tpoly "name" [] lvls no_reason);
+  [%expect {| [NoReason] |}]
+
+let%expect_test _ =
+  res_test @@ take_reasons (ttuple [] lvls no_reason);
+  [%expect {| [NoReason] |}]
+
+let%expect_test _ =
+  typ_test @@ new_reasons tt no_reason;
+  [%expect {| (TGround (Int, [NoReason])) |}]

@@ -1,1 +1,13 @@
 val ( + ) : int -> int -> int
+val ( - ) : int -> int -> int
+
+val fst : 'a * 'b -> 'a
+val snd : 'a * 'b -> 'b
+
+val ( ++ ) : int * int -> int * int -> int * int
+
+type my_int = 
+  | None
+  | Int of int
+
+val ( +++ ) : my_int -> my_int -> my_int

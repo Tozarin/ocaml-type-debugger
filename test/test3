@@ -1,1 +1,7 @@
-1 "123"
+let rec foo x = 
+    match x with 
+    | x -> foo (x - 1)
+    | 1 -> 1
+;;
+
+let bar = foo "123";; 

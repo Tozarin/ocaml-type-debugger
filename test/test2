@@ -1,4 +1,15 @@
+let foo (Int x) = x + 1;;
+
+let foo = (Int 1) +++ (Int 2);;
+
 let foo x = 
-  x + 1 
-in 
-foo "123"
+  match x with 
+  | Int y -> y
+  | None -> 0
+;;
+
+let bar = (foo None) + 1;;
+
+let foo = fun x -> Int x;;
+
+let bar = foo 1;;

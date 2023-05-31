@@ -16,7 +16,8 @@ let () =
       (fun acc s ->
         let* env = acc in
         top_infer env s)
-      (Preinit.get_env "pre_inited") codes
+      (Preinit.get_env "pre_inited")
+      codes
   in
   let open Format in
   match ts with
