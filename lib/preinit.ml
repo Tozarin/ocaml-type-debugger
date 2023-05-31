@@ -70,3 +70,83 @@ let get_env file =
       let* acc = acc in
       add_from_sig acc s)
     (return []) ss
+
+(********************tests********************)
+let preinit_test code =
+  let ss = Parse.interface (Lexing.from_string code) in
+  match add_from_sig [] (List.hd ss) with
+  | Ok env ->
+      let n, t = List.hd env in
+      Printf.printf "%s %s" n (show_typ t)
+  | Error e -> pp_err Format.std_formatter e
+
+let%expect_test _ =
+  preinit_test {|val (+) : int -> int -> int|};
+  [%expect
+    {|
+      + (TArrow ((TGround (Int, [])),
+         (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+            { old_lvl = 0; new_lvl = 0 }, [])),
+         { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  preinit_test {|val foo : string|};
+  [%expect
+    {|
+      foo (TGround (String, [])) |}]
+
+let%expect_test _ =
+  preinit_test {|val foo : float|};
+  [%expect
+    {|
+      foo (TGround (Float, [])) |}]
+
+let%expect_test _ =
+  preinit_test {|val foo : char|};
+  [%expect
+    {|
+      foo (TGround (Char, [])) |}]
+
+let%expect_test _ =
+  preinit_test {|val foo : bool|};
+  [%expect
+    {|
+      foo (TGround (Bool, [])) |}]
+
+let%expect_test _ =
+  preinit_test {|val foo : my_typ|};
+  [%expect
+    {|
+      foo (TPoly ("my_typ", [], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  preinit_test {|type mt = | None | Some of int|};
+  [%expect
+    {|
+      Some (TArrow ((TGround (Int, [])),
+         (TPoly ("mt", [], { old_lvl = 0; new_lvl = 0 }, [])),
+         { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  preinit_test {|type mt = | Some of int | None|};
+  [%expect
+    {|
+      None (TPoly ("mt", [], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  preinit_test {|type mt = | None | Some of int * int|};
+  [%expect
+    {|
+      Some (TArrow (
+         (TTuple ([(TGround (Int, [])); (TGround (Int, []))],
+            { old_lvl = 0; new_lvl = 0 }, [])),
+         (TPoly ("mt", [], { old_lvl = 0; new_lvl = 0 }, [])),
+         { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  preinit_test {|type 'a mt = | None | Some of 'a|};
+  [%expect
+    {|
+      Some (TArrow ((TVar (ref ((Unbound ("a", 0, []))), [])),
+         (TPoly ("mt", [], { old_lvl = 0; new_lvl = 0 }, [])),
+         { old_lvl = 0; new_lvl = 0 }, [])) |}]
