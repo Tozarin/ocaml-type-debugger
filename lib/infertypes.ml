@@ -300,7 +300,8 @@ let%expect_test _ =
 
 let%expect_test _ =
   typ_test @@ map_reasons (fun _ -> no_reason) (tvar_link (link tt []) []);
-  [%expect {| (TVar (ref ((Link ((TGround (Int, [NoReason])), [NoReason]))), [NoReason])) |}]
+  [%expect
+    {| (TVar (ref ((Link ((TGround (Int, [NoReason])), [NoReason]))), [NoReason])) |}]
 
 let%expect_test _ =
   typ_test @@ map_reasons (fun _ -> no_reason) (tarrow tt tt lvls []);
