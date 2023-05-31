@@ -153,7 +153,7 @@ let rec unify t1 t2 =
           *> return
                (l_ls.new_lvl <- min_level;
                 r_ls.new_lvl <- min_level)
-    | TPoly (l_name, _, _, _), TPoly (r_name, _, _, _) when l_name != r_name ->
+    | TPoly (l_name, _, _, _), TPoly (r_name, _, _, _) when l_name <> r_name ->
         unify_fail t1 t2
     | TPoly (_, l_ts, l_ls, _), TPoly (_, r_ts, r_ls, _)
     | TTuple (l_ts, l_ls, _), TTuple (r_ts, r_ls, _) ->
