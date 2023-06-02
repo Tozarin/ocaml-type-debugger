@@ -91,26 +91,22 @@ let%expect_test _ =
 
 let%expect_test _ =
   preinit_test {|val foo : string|};
-  [%expect
-    {|
+  [%expect {|
       foo (TGround (String, [])) |}]
 
 let%expect_test _ =
   preinit_test {|val foo : float|};
-  [%expect
-    {|
+  [%expect {|
       foo (TGround (Float, [])) |}]
 
 let%expect_test _ =
   preinit_test {|val foo : char|};
-  [%expect
-    {|
+  [%expect {|
       foo (TGround (Char, [])) |}]
 
 let%expect_test _ =
   preinit_test {|val foo : bool|};
-  [%expect
-    {|
+  [%expect {|
       foo (TGround (Bool, [])) |}]
 
 let%expect_test _ =

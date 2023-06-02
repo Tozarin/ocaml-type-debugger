@@ -507,3 +507,599 @@ let rec from_core = function
           in
           return @@ new_poly name ts [])
   | _ -> unsup_core
+
+(********************tests********************)
+
+let tt = tgronud int_t []
+let ll = link tt []
+let tl = tvar_link ll []
+let typ_test = pp_typ Format.std_formatter
+let lvls = { new_lvl = 0; old_lvl = 0 }
+let arr = tarrow tt tt lvls []
+let pol = tpoly "name" [] lvls []
+let tup = ttuple [] lvls []
+
+let%expect_test _ =
+  typ_test @@ repr tl;
+  [%expect {| (TGround (Int, [])) |}]
+
+let%expect_test _ =
+  typ_test @@ repr tt;
+  [%expect {| (TGround (Int, [])) |}]
+
+let%expect_test _ =
+  print_int @@ get_lvl (tvar_unbound (unbound "name" 1 []) []);
+  [%expect {| 1 |}]
+
+let%expect_test _ =
+  print_int @@ get_lvl tt;
+  [%expect {| 0 |}]
+
+let%expect_test _ =
+  print_int @@ get_lvl arr;
+  [%expect {| 0 |}]
+
+let%expect_test _ =
+  print_int @@ get_lvl pol;
+  [%expect {| 0 |}]
+
+let%expect_test _ =
+  print_int @@ get_lvl tup;
+  [%expect {| 0 |}]
+
+let%expect_test _ =
+  reset_gensym ();
+  print_int !gensym_counter;
+  [%expect {| 0 |}]
+
+let%expect_test _ =
+  print_string @@ gensym ();
+  [%expect {| a |}]
+
+let%expect_test _ =
+  let rec loop = function
+    | n when n < 26 ->
+        let _ = gensym () in
+        loop @@ (n + 1)
+    | _ -> gensym ()
+  in
+  print_string @@ loop 0;
+  [%expect {| t27 |}]
+
+let%expect_test _ =
+  reset_typ_vars ();
+  print_int !curr_lvl;
+  [%expect {| 0 |}]
+
+let%expect_test _ =
+  enter_lvl ();
+  print_int !curr_lvl;
+  [%expect {| 1 |}]
+
+let%expect_test _ =
+  leave_lvl ();
+  print_int !curr_lvl;
+  [%expect {| 0 |}]
+
+let%expect_test _ =
+  typ_test @@ newvar () [];
+  [%expect {| (TVar (ref ((Unbound ("a", 0, []))), [])) |}]
+
+let%expect_test _ =
+  typ_test @@ new_arrow tt tt [];
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  typ_test @@ new_poly "name" [] [];
+  [%expect {| (TPoly ("name", [], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  typ_test @@ new_tuple [] [];
+  [%expect {| (TTuple ([], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+(***********cyc_free tests********************)
+
+let c_test t =
+  match cyc_free t with Error err -> pp_err Format.std_formatter err | _ -> ()
+
+let%expect_test _ =
+  c_test tt;
+  [%expect {||}]
+
+let%expect_test _ =
+  c_test @@ tvar_unbound (unbound "name" 1 []) [];
+  [%expect {||}]
+
+let%expect_test _ =
+  c_test tl;
+  [%expect {||}]
+
+let%expect_test _ =
+  c_test arr;
+  [%expect {||}]
+
+let%expect_test _ =
+  c_test pol;
+  [%expect {||}]
+
+let%expect_test _ =
+  c_test tup;
+  [%expect {||}]
+
+let m_lvl = { new_lvl = marked_lvl; old_lvl = 0 }
+
+let%expect_test _ =
+  c_test @@ tarrow tt tt m_lvl [];
+  [%expect {| OccursFail |}]
+
+let%expect_test _ =
+  c_test @@ tpoly "name" [] m_lvl [];
+  [%expect {| OccursFail |}]
+
+let%expect_test _ =
+  c_test @@ ttuple [] m_lvl [];
+  [%expect {| OccursFail |}]
+
+(********************tests********************)
+
+let%expect_test _ =
+  reset_lvls_to_update ();
+  (match !lvls_to_update with
+  | [] -> print_string "ok"
+  | _ -> print_string "err");
+  [%expect {| ok |}]
+
+(********************tests********************)
+
+let upd_test t l =
+  let fmt = Format.std_formatter in
+  match update_lvl l t with Ok _ -> pp_typ fmt t | Error err -> pp_err fmt err
+
+let%expect_test _ =
+  upd_test tt 5;
+  [%expect {| (TGround (Int, [])) |}]
+
+let%expect_test _ =
+  upd_test (tvar_unbound (unbound "name" 10 []) []) 5;
+  [%expect {| (TVar (ref ((Unbound ("name", 5, []))), [])) |}]
+
+let%expect_test _ =
+  upd_test (tvar_unbound (unbound "name" 0 []) []) 5;
+  [%expect {| (TVar (ref ((Unbound ("name", 0, []))), [])) |}]
+
+let%expect_test _ =
+  upd_test (tvar_unbound (unbound "name" generic_lvl []) []) 5;
+  [%expect {| MissingInvariant |}]
+
+let%expect_test _ =
+  upd_test (tarrow tt tt { new_lvl = generic_lvl; old_lvl = 0 } []) 5;
+  [%expect {| MissingInvariant |}]
+
+let%expect_test _ =
+  upd_test (tarrow tt tt { new_lvl = marked_lvl; old_lvl = 0 } []) 5;
+  [%expect {| OccursFail |}]
+
+let%expect_test _ =
+  upd_test (tarrow tt tt { new_lvl = 10; old_lvl = 0 } []) 5;
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 0; new_lvl = 10 }, [])) |}]
+
+let%expect_test _ =
+  upd_test (tarrow tt tt { new_lvl = 0; old_lvl = 0 } []) 5;
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  upd_test (tarrow tt tt { new_lvl = 10; old_lvl = 10 } []) 5;
+  reset_lvls_to_update ();
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 10; new_lvl = 5 }, [])) |}]
+
+let%expect_test _ =
+  upd_test (tpoly "name" [] { new_lvl = 10; old_lvl = 0 } []) 5;
+  [%expect {|
+    (TPoly ("name", [], { old_lvl = 0; new_lvl = 10 }, [])) |}]
+
+let%expect_test _ =
+  upd_test (tpoly "name" [] { new_lvl = 0; old_lvl = 0 } []) 5;
+  [%expect {|
+    (TPoly ("name", [], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  upd_test (tpoly "name" [] { new_lvl = 10; old_lvl = 10 } []) 5;
+  reset_lvls_to_update ();
+  [%expect {|
+    (TPoly ("name", [], { old_lvl = 10; new_lvl = 5 }, [])) |}]
+
+let%expect_test _ =
+  upd_test (ttuple [] { new_lvl = 10; old_lvl = 0 } []) 5;
+  [%expect {|
+    (TTuple ([], { old_lvl = 0; new_lvl = 10 }, [])) |}]
+
+let%expect_test _ =
+  upd_test (ttuple [] { new_lvl = 0; old_lvl = 0 } []) 5;
+  [%expect {|
+    (TTuple ([], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  upd_test (ttuple [] { new_lvl = 10; old_lvl = 10 } []) 5;
+  reset_lvls_to_update ();
+  [%expect {|
+    (TTuple ([], { old_lvl = 10; new_lvl = 5 }, [])) |}]
+
+(**************unify_tests********************)
+
+let u_test t1 t2 =
+  let fmt = Format.std_formatter in
+  match unify t1 t2 with
+  | Ok _ ->
+      pp_typ fmt t1;
+      pp_typ fmt t2
+  | Error err -> pp_err fmt err
+
+let%expect_test _ =
+  u_test tt tt;
+  [%expect {| (TGround (Int, []))(TGround (Int, [])) |}]
+
+let%expect_test _ =
+  let unb = unbound "name" 0 [] in
+  u_test (tvar_unbound unb []) (tvar_unbound unb []);
+  [%expect
+    {|
+    (TVar (ref ((Unbound ("name", 0, []))), []))(TVar (
+                                                   ref ((Link (
+                                                           (TVar (
+                                                              ref ((Unbound (
+                                                                      "name", 0,
+                                                                      []))),
+                                                              [])),
+                                                           []))),
+                                                   [])) |}]
+
+let%expect_test _ =
+  u_test
+    (tvar_unbound (unbound "name" 0 []) [])
+    (tvar_unbound (unbound "name" 1 []) []);
+  [%expect
+    {|
+    (TVar (ref ((Unbound ("name", 0, []))), []))(TVar (
+                                                   ref ((Link (
+                                                           (TVar (
+                                                              ref ((Unbound (
+                                                                      "name", 0,
+                                                                      []))),
+                                                              [])),
+                                                           []))),
+                                                   [])) |}]
+
+let%expect_test _ =
+  u_test
+    (tvar_unbound (unbound "name" 1 []) [])
+    (tvar_unbound (unbound "name" 0 []) []);
+  [%expect
+    {|
+    (TVar (ref ((Link ((TVar (ref ((Unbound ("name", 0, []))), [])), []))), []))(
+    TVar (ref ((Unbound ("name", 0, []))), [])) |}]
+
+let%expect_test _ =
+  u_test (tvar_unbound (unbound "name" 0 []) []) tt;
+  [%expect
+    {|
+    (TVar (ref ((Link ((TGround (Int, [])), []))), []))(TGround (Int, [])) |}]
+
+let%expect_test _ =
+  u_test tt (tvar_unbound (unbound "name" 0 []) []);
+  [%expect
+    {|
+    (TGround (Int, []))(TVar (ref ((Link ((TGround (Int, [])), []))), [])) |}]
+
+let%expect_test _ =
+  u_test (tarrow tt tt m_lvl []) (tarrow tt tt lvls []);
+  [%expect {|
+    OccursFail |}]
+
+let%expect_test _ =
+  u_test (tarrow tt tt lvls []) (tarrow tt tt m_lvl []);
+  [%expect {|
+    OccursFail |}]
+
+let%expect_test _ =
+  u_test (tarrow tt tt lvls []) (tarrow tt tt lvls []);
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 0; new_lvl = 0 }, []))(TArrow ((TGround (Int, [])),
+                                            (TGround (Int, [])),
+                                            { old_lvl = 0; new_lvl = 0 },
+                                            [])) |}]
+
+let%expect_test _ =
+  u_test (tpoly "name1" [] lvls []) (tpoly "name2" [] lvls []);
+  [%expect
+    {|
+      (UnifyFail ((TPoly ("name1", [], { old_lvl = 0; new_lvl = 0 }, [])),
+         (TPoly ("name2", [], { old_lvl = 0; new_lvl = 0 }, [])))) |}]
+
+let%expect_test _ =
+  u_test (tpoly "name" [] m_lvl []) (tpoly "name" [] lvls []);
+  [%expect {| OccursFail |}]
+
+let%expect_test _ =
+  u_test (tpoly "name" [] lvls []) (tpoly "name" [] m_lvl []);
+  [%expect {| OccursFail |}]
+
+let%expect_test _ =
+  u_test (tpoly "name" [ tt ] lvls []) (tpoly "name" [ tt ] lvls []);
+  [%expect
+    {|
+      (TPoly ("name", [(TGround (Int, []))], { old_lvl = 0; new_lvl = 0 }, []))(
+      TPoly ("name", [(TGround (Int, []))], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  u_test (ttuple [] m_lvl []) (ttuple [] lvls []);
+  [%expect {| OccursFail |}]
+
+let%expect_test _ =
+  u_test (ttuple [] lvls []) (ttuple [] m_lvl []);
+  [%expect {| OccursFail |}]
+
+let%expect_test _ =
+  u_test (ttuple [ tt ] lvls []) (ttuple [ tt ] lvls []);
+  [%expect
+    {|
+      (TTuple ([(TGround (Int, []))], { old_lvl = 0; new_lvl = 0 }, []))(TTuple (
+                                                                          [(TGround (
+                                                                          Int,
+                                                                          []))],
+                                                                          { old_lvl =
+                                                                          0;
+                                                                          new_lvl =
+                                                                          0 },
+                                                                          [])) |}]
+
+let%expect_test _ =
+  u_test (tgronud int_t []) (tgronud int_t []);
+  [%expect {| (TGround (Int, []))(TGround (Int, [])) |}]
+
+let%expect_test _ =
+  u_test tt arr;
+  [%expect
+    {|
+      (UnifyFail ((TGround (Int, [])),
+         (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+            { old_lvl = 0; new_lvl = 0 }, []))
+         )) |}]
+
+(****************gen_tests********************)
+
+let g_test t =
+  let fmt = Format.std_formatter in
+  match gen t with Ok _ -> pp_typ fmt t | Error err -> pp_err fmt err
+
+let%expect_test _ =
+  g_test @@ tvar_unbound (unbound "name" 10 []) [];
+  [%expect {| (TVar (ref ((Unbound ("name", 100500, []))), [])) |}]
+
+let%expect_test _ =
+  g_test @@ tvar_unbound (unbound "name" 0 []) [];
+  [%expect {| (TVar (ref ((Unbound ("name", 0, []))), [])) |}]
+
+let%expect_test _ =
+  g_test arr;
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  g_test @@ tarrow tt tt { new_lvl = 10; old_lvl = 0 } [];
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  g_test tt;
+  [%expect {| (TGround (Int, [])) |}]
+
+let%expect_test _ =
+  g_test @@ tpoly "name" [] lvls [];
+  [%expect {| (TPoly ("name", [], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  g_test @@ tpoly "name" [ tt ] { new_lvl = 10; old_lvl = 0 } [];
+  [%expect
+    {| (TPoly ("name", [(TGround (Int, []))], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  g_test @@ ttuple [] lvls [];
+  [%expect {| (TTuple ([], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  g_test @@ ttuple [ tt ] { new_lvl = 10; old_lvl = 0 } [];
+  [%expect
+    {| (TTuple ([(TGround (Int, []))], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+(***************inst_tests********************)
+
+let i_test t = pp_typ Format.std_formatter (inst t)
+
+let%expect_test _ =
+  i_test @@ tvar_unbound (unbound "name" generic_lvl []) [];
+  [%expect {| (TVar (ref ((Unbound ("b", 0, []))), [])) |}]
+
+let%expect_test _ =
+  i_test tt;
+  [%expect {| (TGround (Int, [])) |}]
+
+let%expect_test _ =
+  i_test tl;
+  [%expect {| (TGround (Int, [])) |}]
+
+let%expect_test _ =
+  i_test @@ tarrow tt tt { new_lvl = generic_lvl; old_lvl = generic_lvl } [];
+  [%expect
+    {|
+    (TArrow ((TGround (Int, [])), (TGround (Int, [])),
+       { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  i_test
+  @@ tpoly "name" [ tt ] { new_lvl = generic_lvl; old_lvl = generic_lvl } [];
+  [%expect
+    {| (TPoly ("name", [(TGround (Int, []))], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+let%expect_test _ =
+  i_test @@ ttuple [ tt ] { new_lvl = generic_lvl; old_lvl = generic_lvl } [];
+  [%expect
+    {| (TTuple ([(TGround (Int, []))], { old_lvl = 0; new_lvl = 0 }, [])) |}]
+
+(********************tests********************)
+
+open Lexing
+
+let get_code code =
+  let s = List.hd @@ Parse.implementation (Lexing.from_string code) in
+  match s.pstr_desc with Pstr_eval (expr, _) -> return expr | _ -> ph
+
+let loc =
+  let pos = { pos_fname = "name"; pos_lnum = 0; pos_bol = 0; pos_cnum = 0 } in
+  { loc_start = pos; loc_end = pos; loc_ghost = false }
+
+let mc_test c = pp_ground_typ Format.std_formatter (match_const c)
+
+let%expect_test _ =
+  mc_test @@ Pconst_integer ("1", None);
+  [%expect {| Int |}]
+
+let%expect_test _ =
+  mc_test @@ Pconst_char 'c';
+  [%expect {| Char |}]
+
+let%expect_test _ =
+  mc_test @@ Pconst_string ("string", loc, None);
+  [%expect {| String |}]
+
+let%expect_test _ =
+  mc_test @@ Pconst_float ("1,2", None);
+  [%expect {| Float |}]
+
+let%expect_test _ =
+  print_string
+    (if eq_const (Pconst_char 'c') (Pconst_char 'c') then "ok" else "err");
+  [%expect {| ok |}]
+
+let%expect_test _ =
+  pp_typ Format.std_formatter (gen_fun 2 loc);
+  [%expect
+    {|
+    (TArrow (
+       (TVar (
+          ref ((Unbound ("e", 0, [(RecDef File "name", line 1, characters 0-0)]))),
+          [])),
+       (TArrow (
+          (TVar (
+             ref ((Unbound ("d", 0,
+                     [(RecDef File "name", line 1, characters 0-0)]))),
+             [])),
+          (TVar (
+             ref ((Unbound ("c", 0,
+                     [(RecDef File "name", line 1, characters 0-0)]))),
+             [])),
+          { old_lvl = 0; new_lvl = 0 },
+          [(RecDef File "name", line 1, characters 0-0)])),
+       { old_lvl = 0; new_lvl = 0 },
+       [(RecDef File "name", line 1, characters 0-0)])) |}]
+
+let%expect_test _ =
+  (match get_code {|fun x -> fun y -> fun z -> z|} with
+  | Ok e -> print_int @@ count_of_args e.pexp_desc
+  | Error err -> pp_err Format.std_formatter err);
+  [%expect {| 3 |}]
+
+let%expect_test _ =
+  pp_typ Format.std_formatter (arg_res_fun tt loc);
+  [%expect {| (TGround (Int, [])) |}]
+
+let%expect_test _ =
+  pp_typ Format.std_formatter (arg_res_fun (gen_fun 2 loc) loc);
+  [%expect
+    {|
+    (TArrow (
+       (TVar (
+          ref ((Unbound ("h", 0,
+                  [(ApplyAs (1,
+                      (TArrow ((TVar (ref ((Unbound ("h", 0, []))), [])),
+                         (TArrow ((TVar (ref ((Unbound ("g", 0, []))), [])),
+                            (TVar (ref ((Unbound ("f", 0, []))), [])),
+                            { old_lvl = 0; new_lvl = 0 }, [])),
+                         { old_lvl = 0; new_lvl = 0 }, [])),
+                      File "name", line 1, characters 0-0));
+                    (RecDef File "name", line 1, characters 0-0)]
+                  ))),
+          [])),
+       (TArrow (
+          (TVar (
+             ref ((Unbound ("g", 0,
+                     [(ApplyAs (2,
+                         (TArrow ((TVar (ref ((Unbound ("h", 0, []))), [])),
+                            (TArrow ((TVar (ref ((Unbound ("g", 0, []))), [])),
+                               (TVar (ref ((Unbound ("f", 0, []))), [])),
+                               { old_lvl = 0; new_lvl = 0 }, [])),
+                            { old_lvl = 0; new_lvl = 0 }, [])),
+                         File "name", line 1, characters 0-0));
+                       (RecDef File "name", line 1, characters 0-0)]
+                     ))),
+             [])),
+          (TVar (
+             ref ((Unbound ("f", 0,
+                     [(ApplyAs (3,
+                         (TArrow ((TVar (ref ((Unbound ("h", 0, []))), [])),
+                            (TArrow ((TVar (ref ((Unbound ("g", 0, []))), [])),
+                               (TVar (ref ((Unbound ("f", 0, []))), [])),
+                               { old_lvl = 0; new_lvl = 0 }, [])),
+                            { old_lvl = 0; new_lvl = 0 }, [])),
+                         File "name", line 1, characters 0-0));
+                       (RecDef File "name", line 1, characters 0-0)]
+                     ))),
+             [])),
+          { old_lvl = 0; new_lvl = 0 },
+          [(RecDef File "name", line 1, characters 0-0)])),
+       { old_lvl = 0; new_lvl = 0 },
+       [(RecDef File "name", line 1, characters 0-0)])) |}]
+
+let tof_test code =
+  match
+    top_infer [] (List.hd @@ Parse.implementation (Lexing.from_string code))
+  with
+  | Ok _ -> print_string "ok"
+  | Error err -> pp_err Format.std_formatter err
+
+let%expect_test _ =
+  tof_test {|1 + 1|};
+  [%expect {| (NoSuchFunction "+") |}]
+
+let%expect_test _ =
+  tof_test {|1|};
+  [%expect {| ok |}]
+
+let%expect_test _ =
+  tof_test {|let foo x = match x with | 1 -> 1 | y -> y|};
+  [%expect {| ok |}]
+
+let%expect_test _ =
+  tof_test {|let foo (a, b) = match a, b with | 1, 1 -> 1 | a, b -> a|};
+  [%expect {| ok |}]
+
+let%expect_test _ =
+  tof_test {|let foo _ = 1|};
+  [%expect {| ok |}]
