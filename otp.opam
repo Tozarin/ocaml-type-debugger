@@ -11,6 +11,7 @@ depends: [
   "ocaml"
   "dune" {>= "3.4"}
   "angstrom"
+  "bisect_ppx" {dev & >= "2.5.0"}
   "ppx_inline_test" {with-test}
   "qcheck-core"
   "ppx_expect"

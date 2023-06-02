@@ -1,1 +1,1 @@
-# ocaml-type-debugger
+# ocaml-type-debugger ![build](https://github.com/tozarin/lambda/actions/workflows/act.yml/badge.svg) [![test coverage](https://coveralls.io/repos/github/Tozarin/ocaml-type-debugger/badge.svg?branch=main)](https://coveralls.io/github/Tozarin/ocaml-type-debugger?branch=main)

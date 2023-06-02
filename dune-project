@@ -21,6 +21,7 @@
   ocaml
   dune
   angstrom
+  bisect_ppx
   (ppx_inline_test :with-test)
   qcheck-core
   ppx_expect
